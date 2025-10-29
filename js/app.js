@@ -5,6 +5,10 @@
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec'; // ej: 'https://script.google.com/macros/s/AKfycb.../exec'
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
+// === Config búsqueda en vivo
+const DEBOUNCE_MS = 350;       // espera desde la última tecla
+const LIVE_MIN_CHARS = 2;      // mínimo de letras para buscar si NO es "Exacto"
+
 // === Helpers
 const $ = (q,root=document)=>root.querySelector(q);
 const $$= (q,root=document)=>Array.from(root.querySelectorAll(q));
@@ -15,12 +19,22 @@ const buster = ()=>'_t='+Date.now();
 const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
   .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 
+// Debounce
+function debounce(fn, delay = 300) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(null, args), delay);
+  };
+}
+
 // === Estado
 let COLS = [];
 let ROWS = [];
 let ALL_HEADERS = null;
 let ALL_ROWS = null;
 let SORT = { key:null, asc:true };
+let lastSearchId = 0; // para descartar respuestas viejas
 
 // === Mapeo flexible para el modal
 const MAP = {
@@ -187,29 +201,95 @@ function openPretty(row){
 }
 function cerrarModal(){ $('#overlay').setAttribute('aria-hidden','true'); }
 
-// === Buscar / eventos
-async function buscar(){
+// === Búsqueda (con soporte local si hay ALL cargado)
+function localFilter(by, q, exact){
+  if(!ALL_ROWS || !ALL_HEADERS) return null;
+  const Q = N(q);
+  const headers = ALL_HEADERS.slice();
+  let idxs;
+  if(by && by!=='__ALL__'){
+    const i = headers.findIndex(h => N(h)===N(by));
+    if(i<0) return null;
+    idxs = [i];
+  } else {
+    idxs = headers.map((_,i)=>i);
+  }
+  const rows = ALL_ROWS.filter(rowArr=>{
+    if(!rowArr) return false;
+    return idxs.some(i=>{
+      const v = rowArr[i]==null ? '' : String(rowArr[i]);
+      return exact ? N(v)===Q : N(v).includes(Q);
+    });
+  }).map(rowArr=>{
+    // a objeto por header para reusar renderBody/openPretty
+    const obj = {};
+    headers.forEach((h,i)=> obj[h]= rowArr[i]);
+    return obj;
+  });
+  return { headers, rows };
+}
+
+async function buscar({silent=false} = {}){
   const by = $('#by').value;
   const q  = S($('#q').value).trim();
   const exact = $('#exact').checked;
 
-  if(!q){ $('#status').textContent='Escribí un dato para buscar.'; return; }
-  if(!API){ $('#status').textContent='Pegá la URL de Apps Script (arriba) y presioná Enter.'; return; }
+  if(!q){
+    if(!silent){
+      $('#status').textContent='Escribí un dato para buscar.';
+      ROWS = []; renderBody();
+    }
+    return;
+  }
+  if(!API){
+    $('#status').textContent='Pegá la URL de Apps Script (arriba) y presioná Enter.';
+    return;
+  }
 
-  $('#status').textContent='Buscando…';
+  // umbral de caracteres cuando NO es "Exacto"
+  if(!exact && q.length < LIVE_MIN_CHARS){
+    if(!silent) $('#status').textContent = `Escribí al menos ${LIVE_MIN_CHARS} letras…`;
+    ROWS = []; renderBody();
+    return;
+  }
+
+  const myId = ++lastSearchId;
+  if(!silent) $('#status').textContent='Buscando…';
+
   try{
-    const {headers, rows} = await apiSearch(by, q, exact);
-    COLS = headers && headers.length ? headers : COLS;
+    // 1) intento local si tenemos cache de "all" y búsqueda amplia
+    let headers, rows;
+    const local = (!exact && by==='__ALL__') ? localFilter(by, q, exact) : null;
+
+    if(local && local.rows.length){
+      headers = local.headers;
+      rows    = local.rows;
+    } else {
+      // 2) voy al API
+      const res = await apiSearch(by, q, exact);
+      headers = res.headers && res.headers.length ? res.headers : COLS;
+      rows    = res.rows || [];
+    }
+
+    // descarta si llegó una respuesta vieja
+    if(myId !== lastSearchId) return;
+
+    COLS = headers;
     setCols(COLS);
-    ROWS = rows || [];
+    ROWS = rows;
     renderBody();
     $('#status').textContent = `Resultados: ${ROWS.length}`;
   }catch(e){
     console.error(e);
+    if(myId !== lastSearchId) return;
     $('#status').textContent='Error al buscar (revisá el endpoint).';
   }
 }
 
+// versión debounced para búsqueda en vivo
+const buscarDebounced = debounce(() => buscar({silent:true}), DEBOUNCE_MS);
+
+// === Eventos y arranque
 window.addEventListener('DOMContentLoaded', async ()=>{
   // Guardar / leer endpoint desde UI
   const apiUrl = $('#apiUrl');
@@ -223,11 +303,38 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     });
   }
 
-  $('#btnSearch').addEventListener('click', buscar);
-  $('#btnClear').addEventListener('click', ()=>{ $('#q').value=''; $('#filter').value=''; $('#tbody').innerHTML=''; $('#count').textContent='0'; $('#status').textContent='Listo.'; });
+  // Botones clásicos
+  $('#btnSearch').addEventListener('click', () => buscar({silent:false}));
+  $('#btnClear').addEventListener('click', ()=>{
+    $('#q').value=''; $('#filter').value='';
+    ROWS = []; $('#tbody').innerHTML=''; $('#count').textContent='0';
+    $('#status').textContent='Listo.';
+  });
   $('#filter').addEventListener('input', renderBody);
   $('#modalClose').addEventListener('click', cerrarModal);
   $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') cerrarModal(); });
+
+  // Búsqueda en vivo mientras escribís
+  const qInput = $('#q');
+  qInput.addEventListener('input', ()=>{
+    const v = qInput.value.trim();
+    if(!v){
+      ROWS = []; renderBody();
+      $('#status').textContent='Listo.';
+      return;
+    }
+    buscarDebounced();
+  });
+  // Enter = buscar inmediato
+  qInput.addEventListener('keydown', (e)=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      buscar({silent:false});
+    }
+  });
+  // Cambios de filtros re-disparan búsqueda (debounced)
+  $('#by').addEventListener('change', buscarDebounced);
+  $('#exact').addEventListener('change', buscarDebounced);
 
   // Cargar columnas del server y (si existe) precargar "all" para búsquedas locales rápidas
   try{
