@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Buscar trabajos • Óptica Cristal</title>
+  <link rel="icon" href="logo.png" />
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="card">
+      <div class="toolbar">
+        <img src="logo.png" alt="" class="logo" onerror="this.style.display='none'">
+        <h1>Buscar trabajos v1</h1>
+        <span class="spacer"></span>
+        <small class="muted">Hoja: <b>Carga de trabajos</b></small>
+      </div>
+
+      <div class="toolbar gap">
+        <label>Buscar por</label>
+        <select id="by" title="Columna de búsqueda"></select>
+        <input id="q" placeholder="Escribí el dato…" autocomplete="off" />
+        <label class="chk"><input type="checkbox" id="exact"> Exacto</label>
+        <button id="btnSearch" class="btn">Buscar</button>
+        <button id="btnClear" class="btn ghost">Limpiar</button>
+
+        <span class="spacer"></span>
+        <!-- (opcional) guardá tu URL de Apps Script una vez y queda persistida -->
+        <input id="apiUrl" class="mini" placeholder="Pegar URL de Apps Script y Enter">
+      </div>
+
+      <div id="status" class="status muted">Listo.</div>
+    </header>
+
+    <div class="card">
+      <div class="tableWrap">
+        <table id="tbl">
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="foot muted">
+        <span>Resultados: <b id="count">0</b></span>
+        <span class="spacer"></span>
+        <input id="filter" class="mini" placeholder="Filtrar en la tabla…">
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal bonito -->
+  <div id="overlay" class="overlay" aria-hidden="true">
+    <div class="modal card">
+      <div class="toolbar">
+        <div class="titleStack">
+          <h3 id="modalTitle">Trabajo</h3>
+          <small id="modalSubtitle" class="muted">Vista de solo lectura</small>
+        </div>
+        <span class="spacer"></span>
+        <button id="modalClose" class="btn ghost">✕</button>
+      </div>
+
+      <div id="pretty" class="pretty">
+        <!-- Cabecera -->
+        <section class="header">
+          <div class="badge" id="estadoBadge">—</div>
+          <div class="noTrabajo" id="noTrabajo">Nº —</div>
+        </section>
+
+        <!-- Bloques -->
+        <section class="grid two">
+          <div class="block">
+            <h4>Fechas</h4>
+            <div class="kv">
+              <div>Fecha:</div><div id="kvFecha">—</div>
+              <div>Retira (estimada):</div><div id="kvFechaRetira">—</div>
+            </div>
+          </div>
+          <div class="block">
+            <h4>Paciente</h4>
+            <div class="kv">
+              <div>Documento:</div><div id="kvDni">—</div>
+              <div>Apellido y nombre:</div><div id="kvNombre">—</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid two">
+          <div class="block">
+            <h4>Lentes / Armazón</h4>
+            <div class="kv">
+              <div>Cristal:</div><div id="kvCristal">—</div>
+              <div>Precio cristal:</div><div id="kvPrecioCristal">$ 0</div>
+              <div>Nº armazón:</div><div id="kvNA">—</div>
+              <div>Precio armazón:</div><div id="kvPrecioArmazon">$ 0</div>
+              <div>Detalle armazón:</div><div id="kvDetArmazon">—</div>
+            </div>
+          </div>
+          <div class="block">
+            <h4>Otros</h4>
+            <div class="kv">
+              <div>Otro concepto:</div><div id="kvOtro">—</div>
+              <div>Seña:</div><div id="kvSena">$ 0</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Totales -->
+        <section class="totales">
+          <div class="row"><span>Subtotal</span><b id="totSubtotal">$ 0</b></div>
+          <div class="row muted"><span>– Seña</span><b id="totSena">$ 0</b></div>
+          <div class="row total"><span>Saldo a pagar</span><b id="totSaldo">$ 0</b></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
