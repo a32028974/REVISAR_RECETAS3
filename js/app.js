@@ -1,13 +1,10 @@
-// ===== Buscar trabajos + Modal clarito — v2 (compatible con actions: columns/search/all) =====
-
-// 1) Pegá 1 vez tu URL /exec en la caja "Pegar URL de Apps Script" y Enter,
-//    o hardcodeala acá en API_FALLBACK:
-const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec'; // ej: 'https://script.google.com/macros/s/AKfycb.../exec'
+// ===== Buscar trabajos + Modal clarito — v2 (búsqueda en vivo + “Datos completos”) =====
+const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
 // === Config búsqueda en vivo
-const DEBOUNCE_MS = 350;       // espera desde la última tecla
-const LIVE_MIN_CHARS = 2;      // mínimo de letras para buscar si NO es "Exacto"
+const DEBOUNCE_MS = 350;
+const LIVE_MIN_CHARS = 2;
 
 // === Helpers
 const $ = (q,root=document)=>root.querySelector(q);
@@ -19,13 +16,8 @@ const buster = ()=>'_t='+Date.now();
 const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
   .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 
-// Debounce
 function debounce(fn, delay = 300) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn.apply(null, args), delay);
-  };
+  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(null,args),delay); };
 }
 
 // === Estado
@@ -34,28 +26,66 @@ let ROWS = [];
 let ALL_HEADERS = null;
 let ALL_ROWS = null;
 let SORT = { key:null, asc:true };
-let lastSearchId = 0; // para descartar respuestas viejas
+let lastSearchId = 0;
 
-// === Mapeo flexible para el modal
+// === Mapeo flexible (agrego TODO lo del formulario v05)
 const MAP = {
   estado: ['listo','estado'],
-  fecha: ['fecha'],
-  fechaRetira: ['fecha retira','fecha que retira','fecha retiro'],
+  fecha: ['fecha','fecha que encarga','fecha encarga'],
+  fechaRetira: ['fecha retira','fecha que retira','fecha retiro','fecha (estimada)'],
+  modalidad: ['modalidad de entrega','modalidad','entrega'],
   numero: ['numero trabajo','número trabajo','n trabajo','n° trabajo','num trabajo'],
   dni: ['documento','dni'],
   nombre: ['apellido y nombre','apellido','nombre y apellido','paciente'],
+  telefono: ['telefono','teléfono','celular'],
+  localidad: ['localidad','ciudad','barrio'],
   cristal: ['cristal','tipo de cristal'],
   precioCristal: ['precio cristal'],
-  nAnteojo: ['n anteojo','nº anteojo','n armazon','nº armazón','armazon n'],
+  nAnteojo: ['n anteojo','nº anteojo','n armazon','nº armazón','armazon n','numero armazon'],
   precioArmazon: ['precio armazon','precio armazón'],
-  detArmazon: ['detalle armazon','detalle armazón','modelo / marca','marca / modelo','detalle'],
+  detArmazon: ['detalle armazon','detalle armazón','modelo / marca','marca / modelo','detalle','detalle armazon (marca y modelo)'],
   otro: ['otro concepto','concepto','concepto negativo'],
-  sena: ['seña','sena']
+  precioOtro: ['precio otro','monto otro'],
+  descuento: ['descuento'],
+  vendedor: ['vendedor'],
+  formaPago: ['forma de pago','pago','fp'],
+  // Graduación
+  od_esf: ['od esf','od esf.','od esf (lejos)','od esf (dist)'],
+  od_cil: ['od cil','od cil.'],
+  od_eje: ['od eje'],
+  oi_esf: ['oi esf','oi esf.'],
+  oi_cil: ['oi cil','oi cil.'],
+  oi_eje: ['oi eje'],
+  dnp_od: ['dnp (od)','dnp od'],
+  dnp_oi: ['dnp (oi)','dnp oi'],
+  add: ['add'],
+  distFocal: ['distancia focal (obligatorio)','distancia focal','distancia focal (df)'],
+  dnp_oculta: ['dnp (oculta)','dnp oculta'],
+  sena: ['seña','sena'],
+  // Links / archivos
+  fotos: ['fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
 const normKey = k => S(k).trim().toLowerCase();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
 
-// === API (igual a tu contrato anterior)
+const isURL = v => /^https?:\/\//i.test(S(v));
+const linkify = v => {
+  const s = S(v).trim();
+  if(!s) return '—';
+  return isURL(s) ? `<a href="${s}" target="_blank" rel="noopener">${s}</a>` : s;
+};
+function phoneLinks(raw){
+  const s = S(raw).replace(/[^\d+]/g,'').trim();
+  if(!s) return '—';
+  // normalizo Argentina: si empieza con 0/15 los saco; si no tiene +54, lo agrego.
+  let num = s.replace(/^0+/, '').replace(/^15/, '');
+  if(!num.startsWith('+54') && !num.startsWith('54')) num = '54'+num.replace(/^\+/, '');
+  const telHref = `tel:+${num.replace(/^(\+?)/,'')}`;
+  const waHref  = `https://wa.me/${num.replace(/^\+/, '')}`;
+  return `<a href="${telHref}">${s}</a> &nbsp;·&nbsp; <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
+}
+
+// === API
 async function apiColumns(){
   if(!API) throw new Error('Sin API');
   const r = await fetch(`${API}?action=columns&${buster()}`, {cache:'no-store'});
@@ -81,13 +111,12 @@ async function apiAll(){
   return { headers: j.headers, rows: j.rows };
 }
 
-// === UI base
+// === UI tabla
 function setCols(cols){
   COLS = cols.slice();
   const by = $('#by');
   by.innerHTML = `<option value="__ALL__">— Todas —</option>` + COLS.map(c=>`<option>${c}</option>`).join('');
   $('#thead').innerHTML = `<tr>${COLS.map(c=>`<th data-key="${c}">${c}</th>`).join('')}</tr>`;
-  // ordenar por click
   $$('#thead th').forEach(th=>{
     th.addEventListener('click', ()=>{
       const k = th.dataset.key;
@@ -127,13 +156,11 @@ function renderBody(){
     return `<tr>${tds}</tr>`;
   }).join('');
 
-  // abrir modal clarito
   $$('#tbody tr').forEach((tr,i)=> tr.addEventListener('click', ()=>openPretty(rows[i])) );
-
   $('#count').textContent = String(rows.length);
 }
 
-// === Modal claro
+// === Modal
 function classifyEstado(s){
   s = S(s).toLowerCase();
   if(s.includes('listo') || s.includes('entregado')) return 'ok';
@@ -141,60 +168,126 @@ function classifyEstado(s){
   if(s.includes('anula') || s.includes('cancel')) return 'bad';
   return '';
 }
-function openPretty(row){
-  const get = (canon) => {
-    const keys = MAP[canon]||[];
-    for(const k of keys){
-      for(const kk of Object.keys(row)){
-        if(normKey(kk)===normKey(k)) return row[kk];
-      }
+function g(row, canon){
+  const keys = MAP[canon]||[];
+  for(const k of keys){
+    for(const kk of Object.keys(row)){
+      if(normKey(kk)===normKey(k)) return row[kk];
     }
-    return undefined;
-  };
-  const estado = coalesce(get('estado'), row['LISTO'], row['Estado']);
-  const fecha = coalesce(get('fecha'));
-  const fechaRetira = coalesce(get('fechaRetira'));
-  const numero = coalesce(get('numero'));
-  const dni = coalesce(get('dni'));
-  const nombre = coalesce(get('nombre'));
-  const cristal = coalesce(get('cristal'));
-  const precioCristal = Number(S(coalesce(get('precioCristal'),0)).replace(/[^\d.-]/g,''))||0;
-  const nAnteojo = coalesce(get('nAnteojo'));
-  const precioArmazon = Number(S(coalesce(get('precioArmazon'),0)).replace(/[^\d.-]/g,''))||0;
-  const detArmazon = coalesce(get('detArmazon'));
-  const otro = S(coalesce(get('otro'),'')).trim();
-  const sena = Number(S(coalesce(get('sena'),0)).replace(/[^\d.-]/g,''))||0;
+  }
+  return undefined;
+}
+function openPretty(row){
+  // Core
+  const estado       = coalesce(g(row,'estado'), row['LISTO'], row['Estado']);
+  const fecha        = coalesce(g(row,'fecha'));
+  const fechaRetira  = coalesce(g(row,'fechaRetira'));
+  const numero       = coalesce(g(row,'numero'));
+  const dni          = coalesce(g(row,'dni'));
+  const nombre       = coalesce(g(row,'nombre'));
+  const telefono     = coalesce(g(row,'telefono'));
+  const localidad    = coalesce(g(row,'localidad'));
+  const modalidad    = coalesce(g(row,'modalidad'));
 
+  const cristal      = coalesce(g(row,'cristal'));
+  const precioCristal= Number(S(coalesce(g(row,'precioCristal'),0)).replace(/[^\d.-]/g,''))||0;
+  const nAnteojo     = coalesce(g(row,'nAnteojo'));
+  const precioArmazon= Number(S(coalesce(g(row,'precioArmazon'),0)).replace(/[^\d.-]/g,''))||0;
+  const detArmazon   = coalesce(g(row,'detArmazon'));
+  const otro         = S(coalesce(g(row,'otro'),'')).trim();
+  const precioOtro   = Number(S(coalesce(g(row,'precioOtro'),0)).replace(/[^\d.-]/g,''))||0;
+  const descuento    = Number(S(coalesce(g(row,'descuento'),0)).replace(/[^\d.-]/g,''))||0;
+
+  const sena         = Number(S(coalesce(g(row,'sena'),0)).replace(/[^\d.-]/g,''))||0;
+  const vendedor     = coalesce(g(row,'vendedor'));
+  const formaPago    = coalesce(g(row,'formaPago'));
+
+  // Graduación
+  const od_esf = coalesce(g(row,'od_esf'));
+  const od_cil = coalesce(g(row,'od_cil'));
+  const od_eje = coalesce(g(row,'od_eje'));
+  const oi_esf = coalesce(g(row,'oi_esf'));
+  const oi_cil = coalesce(g(row,'oi_cil'));
+  const oi_eje = coalesce(g(row,'oi_eje'));
+  const dnp_od = coalesce(g(row,'dnp_od'));
+  const dnp_oi = coalesce(g(row,'dnp_oi'));
+  const add    = coalesce(g(row,'add'));
+  const distF  = coalesce(g(row,'distFocal'));
+  const dnpOcc = coalesce(g(row,'dnp_oculta'));
+
+  // Fotos / links
+  const fotosLinkRaw = coalesce(g(row,'fotos'));
+  const fotosLink = linkify(fotosLinkRaw);
+
+  // “Otro” monto embebido en texto
   let otroMonto = 0;
-  if(/\$|\d/.test(otro)){
+  if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
     if(m) otroMonto = Number(m.at(-1).replace(/[^\d.-]/g,''))||0;
   }
-  const subtotal = precioCristal + precioArmazon + (otroMonto||0);
-  const saldo = Math.max(subtotal - sena, 0);
+  const subtotal = (precioCristal + precioArmazon + (precioOtro||otroMonto)) - (descuento||0);
+  const saldo    = Math.max(subtotal - sena, 0);
 
+  // Header
   $('#estadoBadge').textContent = S(estado||'—').toUpperCase();
   $('#estadoBadge').className = 'badge '+classifyEstado(estado);
   $('#noTrabajo').textContent = `Nº ${numero}`;
 
-  $('#kvFecha').textContent = fecha;
-  $('#kvFechaRetira').textContent = fechaRetira;
-  $('#kvDni').textContent = dni;
-  $('#kvNombre').textContent = nombre;
+  // Bloques existentes
+  $('#kvFecha').textContent         = fecha;
+  $('#kvFechaRetira').textContent   = fechaRetira;
+  $('#kvDni').textContent           = dni;
+  $('#kvNombre').textContent        = nombre;
 
-  $('#kvCristal').textContent = cristal;
+  $('#kvCristal').textContent       = cristal;
   $('#kvPrecioCristal').textContent = money(precioCristal);
-  $('#kvNA').textContent = nAnteojo;
+  $('#kvNA').textContent            = nAnteojo;
   $('#kvPrecioArmazon').textContent = money(precioArmazon);
-  $('#kvDetArmazon').textContent = detArmazon;
+  $('#kvDetArmazon').textContent    = detArmazon;
 
-  $('#kvOtro').textContent = otro || '—';
-  $('#kvSena').textContent = money(sena);
+  $('#kvOtro').textContent          = otro || '—';
+  $('#kvSena').textContent          = money(sena);
 
-  $('#totSubtotal').textContent = money(subtotal);
-  $('#totSena').textContent = money(sena);
-  $('#totSaldo').textContent = money(saldo);
+  $('#totSubtotal').textContent     = money(subtotal);
+  $('#totSena').textContent         = money(sena);
+  $('#totSaldo').textContent        = money(saldo);
 
+  // === NUEVO: datos ampliados
+  // Teléfono (clickeable Tel + WhatsApp)
+  const telNode = $('#kvTelefono');
+  if(telNode) telNode.innerHTML = phoneLinks(telefono);
+
+  const locNode = $('#kvLocalidad'); if(locNode) locNode.textContent = localidad;
+  const modNode = $('#kvModalidad'); if(modNode) modNode.textContent = modalidad;
+
+  // Precio otro / Descuento / Forma de pago / Vendedor
+  const pOtroNode = $('#kvPrecioOtro'); if(pOtroNode) pOtroNode.textContent = precioOtro ? money(precioOtro) : '—';
+  const descNode  = $('#kvDescuento');  if(descNode)  descNode.textContent  = descuento ? `– ${money(descuento)}` : '—';
+  const vendNode  = $('#kvVendedor');   if(vendNode)  vendNode.textContent  = vendedor || '—';
+  const fpNode    = $('#kvFormaPago');  if(fpNode)    fpNode.textContent    = formaPago || '—';
+
+  // Graduación
+  const set = (id,val)=>{ const n=$(id); if(n) n.textContent = S(val)||'—'; };
+  set('#od_esf', od_esf); set('#od_cil', od_cil); set('#od_eje', od_eje);
+  set('#oi_esf', oi_esf); set('#oi_cil', oi_cil); set('#oi_eje', oi_eje);
+  set('#dnp_od', dnp_od); set('#dnp_oi', dnp_oi); set('#add', add);
+  set('#dist_f', distF);  set('#dnp_occ', dnpOcc);
+
+  // Link a fotos / Drive
+  const fotosNode = $('#kvFotos'); if(fotosNode) fotosNode.innerHTML = fotosLink;
+
+  // === “Datos completos” (lista cada columna/valor tal como vienen)
+  const box = $('#extraAll');
+  if(box){
+    const entries = Object.entries(row);
+    const html = entries.map(([k,v])=>{
+      const val = isURL(v) ? `<a href="${v}" target="_blank" rel="noopener">${v}</a>` : S(v)||'—';
+      return `<div class="pair"><span class="k">${S(k)}</span><span class="v">${val}</span></div>`;
+    }).join('');
+    box.innerHTML = html || '<div class="muted">Sin datos</div>';
+  }
+
+  // Títulos
   $('#modalTitle').textContent = `Trabajo ${numero||''}`.trim();
   $('#modalSubtitle').textContent = nombre ? `Cliente: ${nombre}` : 'Vista de solo lectura';
   $('#overlay').setAttribute('aria-hidden','false');
@@ -221,10 +314,7 @@ function localFilter(by, q, exact){
       return exact ? N(v)===Q : N(v).includes(Q);
     });
   }).map(rowArr=>{
-    // a objeto por header para reusar renderBody/openPretty
-    const obj = {};
-    headers.forEach((h,i)=> obj[h]= rowArr[i]);
-    return obj;
+    const obj = {}; headers.forEach((h,i)=> obj[h]= rowArr[i]); return obj;
   });
   return { headers, rows };
 }
@@ -235,49 +325,31 @@ async function buscar({silent=false} = {}){
   const exact = $('#exact').checked;
 
   if(!q){
-    if(!silent){
-      $('#status').textContent='Escribí un dato para buscar.';
-      ROWS = []; renderBody();
-    }
+    if(!silent){ $('#status').textContent='Escribí un dato para buscar.'; ROWS=[]; renderBody(); }
     return;
   }
-  if(!API){
-    $('#status').textContent='Pegá la URL de Apps Script (arriba) y presioná Enter.';
-    return;
-  }
-
-  // umbral de caracteres cuando NO es "Exacto"
+  if(!API){ $('#status').textContent='Pegá la URL de Apps Script (arriba) y presioná Enter.'; return; }
   if(!exact && q.length < LIVE_MIN_CHARS){
     if(!silent) $('#status').textContent = `Escribí al menos ${LIVE_MIN_CHARS} letras…`;
-    ROWS = []; renderBody();
-    return;
+    ROWS = []; renderBody(); return;
   }
 
   const myId = ++lastSearchId;
   if(!silent) $('#status').textContent='Buscando…';
 
   try{
-    // 1) intento local si tenemos cache de "all" y búsqueda amplia
     let headers, rows;
     const local = (!exact && by==='__ALL__') ? localFilter(by, q, exact) : null;
-
-    if(local && local.rows.length){
-      headers = local.headers;
-      rows    = local.rows;
-    } else {
-      // 2) voy al API
+    if(local && local.rows.length){ headers=local.headers; rows=local.rows; }
+    else {
       const res = await apiSearch(by, q, exact);
       headers = res.headers && res.headers.length ? res.headers : COLS;
       rows    = res.rows || [];
     }
-
-    // descarta si llegó una respuesta vieja
     if(myId !== lastSearchId) return;
 
-    COLS = headers;
-    setCols(COLS);
-    ROWS = rows;
-    renderBody();
+    COLS = headers; setCols(COLS);
+    ROWS = rows; renderBody();
     $('#status').textContent = `Resultados: ${ROWS.length}`;
   }catch(e){
     console.error(e);
@@ -286,12 +358,10 @@ async function buscar({silent=false} = {}){
   }
 }
 
-// versión debounced para búsqueda en vivo
-const buscarDebounced = debounce(() => buscar({silent:true}), DEBOUNCE_MS);
+const buscarDebounced = debounce(()=>buscar({silent:true}), DEBOUNCE_MS);
 
-// === Eventos y arranque
+// === Eventos / arranque
 window.addEventListener('DOMContentLoaded', async ()=>{
-  // Guardar / leer endpoint desde UI
   const apiUrl = $('#apiUrl');
   if(apiUrl){
     apiUrl.value = API;
@@ -303,51 +373,32 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     });
   }
 
-  // Botones clásicos
   $('#btnSearch').addEventListener('click', () => buscar({silent:false}));
   $('#btnClear').addEventListener('click', ()=>{
-    $('#q').value=''; $('#filter').value='';
-    ROWS = []; $('#tbody').innerHTML=''; $('#count').textContent='0';
-    $('#status').textContent='Listo.';
+    $('#q').value=''; $('#filter').value=''; ROWS=[]; $('#tbody').innerHTML=''; $('#count').textContent='0'; $('#status').textContent='Listo.';
   });
   $('#filter').addEventListener('input', renderBody);
   $('#modalClose').addEventListener('click', cerrarModal);
   $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') cerrarModal(); });
 
-  // Búsqueda en vivo mientras escribís
   const qInput = $('#q');
   qInput.addEventListener('input', ()=>{
     const v = qInput.value.trim();
-    if(!v){
-      ROWS = []; renderBody();
-      $('#status').textContent='Listo.';
-      return;
-    }
+    if(!v){ ROWS=[]; renderBody(); $('#status').textContent='Listo.'; return; }
     buscarDebounced();
   });
-  // Enter = buscar inmediato
-  qInput.addEventListener('keydown', (e)=>{
-    if(e.key==='Enter'){
-      e.preventDefault();
-      buscar({silent:false});
-    }
-  });
-  // Cambios de filtros re-disparan búsqueda (debounced)
+  qInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); buscar({silent:false}); } });
   $('#by').addEventListener('change', buscarDebounced);
   $('#exact').addEventListener('change', buscarDebounced);
 
-  // Cargar columnas del server y (si existe) precargar "all" para búsquedas locales rápidas
   try{
     if(API){
-      const cols = await apiColumns(); // ← action=columns
+      const cols = await apiColumns();
       setCols(cols);
-      const all = await apiAll();      // ← action=all (opcional si lo tenés)
-      if(all?.rows?.length){
-        ALL_HEADERS = all.headers; ALL_ROWS = all.rows;
-      }
+      const all = await apiAll();
+      if(all?.rows?.length){ ALL_HEADERS = all.headers; ALL_ROWS = all.rows; }
       $('#status').textContent='Listo.';
     }else{
-      // sin API: columnas mínimas de arranque
       setCols(['LISTO','FECHA','FECHA RETIRA','NUMERO TRABAJO','DOCUMENTO','APELLIDO Y NOMBRE','CRISTAL']);
       $('#status').textContent='Pegá la URL de Apps Script (arriba) y Enter.';
     }
