@@ -1,4 +1,5 @@
 // ===== Buscar trabajos + Modal clarito =====
+const API = (localStorage.getItem('OC_API') || '').trim();
 // Poné tu URL de Apps Script acá o guardala desde el input de la UI:
 const API_URL = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 
