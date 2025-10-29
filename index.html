@@ -81,6 +81,9 @@
             <div class="kv">
               <div>Documento:</div><div id="kvDni">—</div>
               <div>Apellido y nombre:</div><div id="kvNombre">—</div>
+              <li><span>Teléfono:</span> <span id="kvTelefono">—</span></li>
+<li><span>Localidad:</span> <span id="kvLocalidad">—</span></li>
+<li><span>Modalidad:</span> <span id="kvModalidad">—</span></li>
             </div>
           </div>
         </section>
@@ -94,6 +97,10 @@
               <div>Nº armazón:</div><div id="kvNA">—</div>
               <div>Precio armazón:</div><div id="kvPrecioArmazon">$ 0</div>
               <div>Detalle armazón:</div><div id="kvDetArmazon">—</div>
+              <li><span>Precio otro:</span> <span id="kvPrecioOtro">—</span></li>
+<li><span>Descuento:</span> <span id="kvDescuento">—</span></li>
+<li><span>Vendedor:</span> <span id="kvVendedor">—</span></li>
+<li><span>Forma de pago:</span> <span id="kvFormaPago">—</span></li>
             </div>
           </div>
           <div class="block">
@@ -104,7 +111,28 @@
             </div>
           </div>
         </section>
+<div class="card">
+  <div class="card-title">Fotos / Adjuntos</div>
+  <div class="kv"><span>Carpeta / vínculo:</span> <span id="kvFotos">—</span></div>
+</div>
 
+<!-- Bloque Graduación (si querés verlo en el modal) -->
+<div class="card">
+  <div class="card-title">Graduación</div>
+  <div class="grid-2">
+    <div class="kv"><span>OD ESF</span><span id="od_esf">—</span></div>
+    <div class="kv"><span>OI ESF</span><span id="oi_esf">—</span></div>
+    <div class="kv"><span>OD CIL</span><span id="od_cil">—</span></div>
+    <div class="kv"><span>OI CIL</span><span id="oi_cil">—</span></div>
+    <div class="kv"><span>OD EJE</span><span id="od_eje">—</span></div>
+    <div class="kv"><span>OI EJE</span><span id="oi_eje">—</span></div>
+    <div class="kv"><span>DNP (OD)</span><span id="dnp_od">—</span></div>
+    <div class="kv"><span>DNP (OI)</span><span id="dnp_oi">—</span></div>
+    <div class="kv"><span>ADD</span><span id="add">—</span></div>
+    <div class="kv"><span>Dist. focal</span><span id="dist_f">—</span></div>
+    <div class="kv"><span>DNP (oculta)</span><span id="dnp_occ">—</span></div>
+  </div>
+</div>
         <!-- Totales -->
         <section class="totales">
           <div class="row"><span>Subtotal</span><b id="totSubtotal">$ 0</b></div>
@@ -114,7 +142,10 @@
       </div>
     </div>
   </div>
-
+<div class="card">
+  <div class="card-title">Datos completos (todas las columnas)</div>
+  <div id="extraAll" class="pairs-grid"></div>
+</div>
   <script src="js/app.js"></script>
 </body>
 </html>
