@@ -133,3 +133,10 @@ tbody tr:hover{ background:#f9fafb; }
 
 /* Foot */
 .foot{ padding:10px 12px; border-top:1px dashed var(--line); }
+
+.pairs-grid { display:grid; grid-template-columns: 1fr 2fr; gap:.5rem 1rem; }
+.pairs-grid .pair { display:contents; }
+.pairs-grid .k { color:#667085; font-weight:500; }
+.pairs-grid .v { color:#101828; word-break:break-word; }
+.kv span:first-child{ color:#667085; }
+
