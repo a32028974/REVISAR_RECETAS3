@@ -1,7 +1,7 @@
-// ===== Buscar trabajos + Modal clarito — v3.3 =====
-// - Enriquecimiento de fila al abrir el modal usando "all" (match por NUMERO TRABAJO).
-// - Muestra ENTREGADO POR y FECHA Y HORA aunque la búsqueda devuelva subset.
-// - Mantiene OS/Descuentos/Pago retiro/Adjuntos/Graduación.
+// ===== Buscar trabajos + Modal clarito — v3.3.1 =====
+// Fix: al enriquecer con "all" priorizamos valores NO vacíos de ALL
+// (antes la fila parcial de la búsqueda podía pisar FECHA ENTREGA REAL, etc.)
+// Mantiene OS/Descuentos/Pago retiro/Adjuntos/Graduación/Entrega.
 
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
@@ -30,14 +30,14 @@ function phoneLinks(raw){
   if(!num.startsWith('+54') && !num.startsWith('54')) num = '54'+num.replace(/^\+/, '');
   const telHref = `tel:+${num.replace(/^(\+?)/,'')}`;
   const waHref  = `https://wa.me/${num.replace(/^\+/, '')}`;
-  return `<a href="${telHref}">${s}</a> &nbsp;·&nbsp; <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
+  return `<a href="${telHref}">${s}</a> · <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
 }
 
 let COLS=[], ROWS=[], ALL_HEADERS=null, ALL_ROWS=null;
-let ALL_INDEX_BY_NUM = null;        // <-- índice para enriquecer
+let ALL_INDEX_BY_NUM = null;
 let SORT = { key:null, asc:true }, lastSearchId = 0;
 
-// === Mapeo de columnas
+// ===== Mapeo de columnas =====
 const MAP = {
   estado: ['listo','estado'],
   fecha: ['fecha','fecha que encarga','fecha encarga'],
@@ -81,7 +81,7 @@ const MAP = {
   precioObraSocial: ['precio obra social','monto obra social','descuento obra social','importe obra social'],
   pagoRetiro: ['pago retiro','pago al retirar','saldo pagado','pago final','pago entrega','pago restante'],
 
-  // Entrega
+  // Entrega (ojo: incluye “Fecha entrega real”)
   entregadoPor: ['entregado por','entrego','entregó'],
   fechaEntrega: ['fecha y hora','fecha entrega real','fecha entrega'],
 
@@ -89,7 +89,7 @@ const MAP = {
   fotos: ['pdf','link pdf','url pdf','fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
 
-// === API
+// ===== API =====
 async function apiColumns(){
   if(!API) throw new Error('Sin API');
   const r = await fetch(`${API}?action=columns&${buster()}`, {cache:'no-store'});
@@ -115,7 +115,7 @@ async function apiAll(){
   return { headers: j.headers, rows: j.rows };
 }
 
-// === Índice de ALL para enriquecer por número de trabajo
+// ===== Índice por número para enriquecer =====
 function buildAllIndex(){
   if(!ALL_HEADERS || !ALL_ROWS) { ALL_INDEX_BY_NUM=null; return; }
   const numVariants = MAP.numero.map(normKey);
@@ -134,7 +134,7 @@ function buildAllIndex(){
   ALL_INDEX_BY_NUM = map;
 }
 
-// === Tabla
+// ===== Tabla =====
 function setCols(cols){
   COLS = cols.slice();
   const by = $('#by');
@@ -183,7 +183,7 @@ function renderBody(){
   $('#count').textContent = String(rows.length);
 }
 
-// === Utils modal
+// ===== Utils modal =====
 function classifyEstado(s){
   s = S(s).toLowerCase();
   if(s.includes('listo') || s.includes('entregado')) return 'ok';
@@ -201,16 +201,29 @@ function g(row, canon){
   return undefined;
 }
 
-// === Modal
+// ---- Merge que prioriza valores “rellenos” de ALL ----
+function mergePreferFilled(partialRow, allRow){
+  if(!allRow) return {...partialRow};
+  const out = {...partialRow};
+  for(const k of Object.keys(allRow)){
+    const vAll = allRow[k];
+    const vPar = out[k];
+    const filledAll = !(vAll==null || S(vAll).trim()==='');
+    if(filledAll) out[k] = vAll; // si ALL tiene algo, gana
+    // si ALL viene vacío, queda lo que ya tenía la fila parcial
+  }
+  return out;
+}
+
+// ===== Modal =====
 function openPretty(rowIn){
-  // 1) Enriquecemos la fila con ALL usando NUMERO TRABAJO
+  // Enriquecer con ALL por número de trabajo (prioriza valores NO vacíos de ALL)
   let merged = rowIn;
   const numeroTemp = coalesce(g(rowIn,'numero'), rowIn['NUMERO TRABAJO'], rowIn['Número trabajo']);
   if(ALL_INDEX_BY_NUM && numeroTemp && ALL_INDEX_BY_NUM.has(numeroTemp)){
-    merged = Object.assign({}, ALL_INDEX_BY_NUM.get(numeroTemp), rowIn);
+    const full = ALL_INDEX_BY_NUM.get(numeroTemp);
+    merged = mergePreferFilled(rowIn, full);
   }
-
-  // A partir de acá usamos 'row' = merged
   const row = merged;
 
   // Core
@@ -252,9 +265,9 @@ function openPretty(rowIn){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Entrega (de ALL ahora sí entra)
+  // Entrega
   const entregadoPor  = coalesce(g(row,'entregadoPor'));
-  const fechaEntrega  = coalesce(g(row,'fechaEntrega'));
+  const fechaEntrega  = coalesce(g(row,'fechaEntrega')); // incluye "Fecha entrega real"
 
   // Adjuntos → botón
   const fotosRaw  = coalesce(g(row,'fotos'));
@@ -337,7 +350,7 @@ function openPretty(rowIn){
 }
 function cerrarModal(){ $('#overlay').setAttribute('aria-hidden','true'); }
 
-// === Búsqueda (usa local cache si es posible)
+// ===== Búsqueda (con cache local opcional) =====
 function localFilter(by, q, exact){
   if(!ALL_ROWS || !ALL_HEADERS) return null;
   const Q = N(q);
@@ -403,7 +416,7 @@ async function buscar({silent=false} = {}){
 
 const buscarDebounced = debounce(()=>buscar({silent:true}), DEBOUNCE_MS);
 
-// === Arranque
+// ===== Arranque =====
 window.addEventListener('DOMContentLoaded', async ()=>{
   const apiUrl = $('#apiUrl');
   if(apiUrl){
@@ -442,7 +455,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       if(all?.rows?.length){
         ALL_HEADERS = all.headers;
         ALL_ROWS    = all.rows;
-        buildAllIndex(); // <--- arma el índice por número
+        buildAllIndex();
       }
       $('#status').textContent='Listo.';
     }else{
