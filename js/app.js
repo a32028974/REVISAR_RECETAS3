@@ -470,6 +470,10 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') cerrarModal(); });
 
   const qInput = $('#q');
+  qInput.focus();
+qInput.select();             // opcional: selecciona el texto si hubiera
+setTimeout(()=>qInput.focus(), 0); // fallback por si el navegador lo ignora en el primer tick
+
   qInput.addEventListener('input', ()=>{
     const v = qInput.value.trim();
     if(!v){ ROWS=[]; renderBody(); $('#status').textContent='Listo.'; return; }
