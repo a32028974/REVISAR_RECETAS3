@@ -17,7 +17,7 @@
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
-  margin:0; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu; 
+  margin:0; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu;
   color:var(--ink); background:var(--bg);
 }
 
@@ -32,7 +32,7 @@ h4{ font-size:14px; color:var(--muted); letter-spacing:.3px; text-transform:uppe
 .spacer{ flex:1; }
 
 .btn{
-  border:1px solid var(--brand); background:var(--brand); color:#fff; 
+  border:1px solid var(--brand); background:var(--brand); color:#fff;
   padding:8px 12px; border-radius:10px; cursor:pointer;
 }
 .btn:hover{ filter:brightness(.96); }
@@ -69,13 +69,25 @@ tbody td{
 tbody tr{ cursor:pointer; }
 tbody tr:hover{ background:#f9fafb; }
 
+/* Helpers para celdas que usa el JS */
+.right{ text-align:right; }
+.num{ font-variant-numeric: tabular-nums; }
+.wraptext{ white-space:normal; }
+
 /* ====== Overlay / Modal ====== */
 .overlay{
   position:fixed; inset:0; background:rgba(15,23,42,.38);
   display:none; align-items:center; justify-content:center; z-index:50; padding:24px;
 }
 .overlay[aria-hidden="false"]{ display:flex; }
-.modal{ width:min(980px, 100%); max-height:90vh; display:flex; flex-direction:column; }
+
+/* El modal nunca se corta, hace scroll interno si hace falta */
+.modal{
+  width:min(980px, 100%);
+  max-height:92vh;
+  display:flex; flex-direction:column;
+  overflow-y:auto;
+}
 .modal .toolbar{ border-bottom:1px solid var(--line); }
 .modal .btn.ghost{ font-size:18px; }
 
@@ -95,9 +107,7 @@ tbody tr:hover{ background:#f9fafb; }
 .badge.warn{ color:#92400e; background:#fffbeb; border-color:#fde68a; }
 .badge.bad{ color:#991b1b; background:#fef2f2; border-color:#fecaca; }
 
-.noTrabajo{
-  font-weight:800; font-size:18px; letter-spacing:.2px;
-}
+.noTrabajo{ font-weight:800; font-size:18px; letter-spacing:.2px; }
 
 .grid{ display:grid; gap:14px; }
 .grid.two{ grid-template-columns:1fr 1fr; }
@@ -109,14 +119,19 @@ tbody tr:hover{ background:#f9fafb; }
   border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff;
 }
 
-.kv{ 
+.kv{
   display:grid; grid-template-columns:180px 1fr; column-gap:12px; row-gap:6px; margin-top:8px;
 }
 .kv > div:first-child{ color:var(--muted); }
 .kv b{ font-weight:700; }
 
+/* Asegura que valores largos (links, modelos) no se corten */
+.kv > div:nth-child(2n){
+  white-space:normal; word-break:break-word;
+}
+
 .totales{
-  margin-top:16px; 
+  margin-top:16px;
   background:linear-gradient(#ffffff,#fbfdff);
   border:1px solid var(--line); border-radius:14px; padding:14px;
 }
@@ -139,4 +154,3 @@ tbody tr:hover{ background:#f9fafb; }
 .pairs-grid .k { color:#667085; font-weight:500; }
 .pairs-grid .v { color:#101828; word-break:break-word; }
 .kv span:first-child{ color:#667085; }
-
