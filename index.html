@@ -12,7 +12,7 @@
     <header class="card">
       <div class="toolbar">
         <img src="logo.png" alt="" class="logo" onerror="this.style.display='none'">
-        <h1>Buscar trabajos v5 </h1>
+        <h1>Buscar trabajos v3.2</h1>
         <span class="spacer"></span>
         <small class="muted">Hoja: <b>Carga de trabajos</b></small>
       </div>
@@ -108,18 +108,30 @@
             <div class="kv">
               <div>Otro concepto:</div><div id="kvOtro">—</div>
               <div>Seña:</div><div id="kvSena">$ 0</div>
+              <div>Obra social:</div><div id="kvObraSocial">—</div>
+              <div>Precio OS / Desc.:</div><div id="kvPrecioOS">—</div>
+              <div>Pago al retirar:</div><div id="kvPagoRetiro">—</div>
             </div>
           </div>
         </section>
 
-        <!-- Fotos / Adjuntos -->
-        <section class="block">
-          <h4>Fotos / Adjuntos</h4>
-          <div class="kv">
-            <div>Carpeta / vínculo:</div>
-            <div>
-              <a id="kvFotosBtn" class="btn small" href="#" target="_blank" rel="noopener" style="display:none">Abrir carpeta</a>
-              <span id="kvFotosNone">—</span>
+        <!-- Entrega -->
+        <section class="grid two">
+          <div class="block">
+            <h4>Entrega</h4>
+            <div class="kv">
+              <div>Entregado por:</div><div id="kvEntregadoPor">—</div>
+              <div>Fecha y hora:</div><div id="kvFechaEntrega">—</div>
+            </div>
+          </div>
+          <div class="block">
+            <h4>Fotos / Adjuntos</h4>
+            <div class="kv">
+              <div>Carpeta / vínculo:</div>
+              <div>
+                <a id="kvFotosBtn" class="btn small" href="#" target="_blank" rel="noopener" style="display:none">Abrir carpeta</a>
+                <span id="kvFotosNone">—</span>
+              </div>
             </div>
           </div>
         </section>
@@ -128,63 +140,28 @@
         <section class="block">
           <h4>Graduación</h4>
           <div class="fields">
-            <div class="field">
-              <label>OD ESF</label>
-              <div id="od_esf" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>OD CIL</label>
-              <div id="od_cil" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>OD EJE</label>
-              <div id="od_eje" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>Dist. focal</label>
-              <div id="dist_f" class="valueBox">—</div>
-            </div>
-
-            <div class="field">
-              <label>OI ESF</label>
-              <div id="oi_esf" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>OI CIL</label>
-              <div id="oi_cil" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>OI EJE</label>
-              <div id="oi_eje" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>DNP (oculta)</label>
-              <div id="dnp_occ" class="valueBox">—</div>
-            </div>
-
-            <div class="field">
-              <label>DNP (OD)</label>
-              <div id="dnp_od" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>DNP (OI)</label>
-              <div id="dnp_oi" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>ADD</label>
-              <div id="add" class="valueBox">—</div>
-            </div>
-            <div class="field">
-              <label>&nbsp;</label>
-              <div class="valueBox muted"> </div>
-            </div>
+            <div class="field"><label>OD ESF</label><div id="od_esf" class="valueBox">—</div></div>
+            <div class="field"><label>OD CIL</label><div id="od_cil" class="valueBox">—</div></div>
+            <div class="field"><label>OD EJE</label><div id="od_eje" class="valueBox">—</div></div>
+            <div class="field"><label>Dist. focal</label><div id="dist_f" class="valueBox">—</div></div>
+            <div class="field"><label>OI ESF</label><div id="oi_esf" class="valueBox">—</div></div>
+            <div class="field"><label>OI CIL</label><div id="oi_cil" class="valueBox">—</div></div>
+            <div class="field"><label>OI EJE</label><div id="oi_eje" class="valueBox">—</div></div>
+            <div class="field"><label>DNP (oculta)</label><div id="dnp_occ" class="valueBox">—</div></div>
+            <div class="field"><label>DNP (OD)</label><div id="dnp_od" class="valueBox">—</div></div>
+            <div class="field"><label>DNP (OI)</label><div id="dnp_oi" class="valueBox">—</div></div>
+            <div class="field"><label>ADD</label><div id="add" class="valueBox">—</div></div>
+            <div class="field"><label>&nbsp;</label><div class="valueBox muted"> </div></div>
           </div>
         </section>
 
-        <!-- Totales -->
+        <!-- Totales (ahora con OS y Pago retiro) -->
         <section class="totales">
           <div class="row"><span>Subtotal</span><b id="totSubtotal">$ 0</b></div>
+          <div class="row muted"><span>– Descuento</span><b id="totDesc">—</b></div>
+          <div class="row muted"><span>– Obra social</span><b id="totOS">—</b></div>
           <div class="row muted"><span>– Seña</span><b id="totSena">$ 0</b></div>
+          <div class="row muted"><span>– Pago al retirar</span><b id="totPagoRetiro">—</b></div>
           <div class="row total"><span>Saldo a pagar</span><b id="totSaldo">$ 0</b></div>
         </section>
       </div>
