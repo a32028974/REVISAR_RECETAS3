@@ -1,7 +1,6 @@
-// ===== Buscar trabajos + Modal clarito — v3.3.1 =====
-// Fix: al enriquecer con "all" priorizamos valores NO vacíos de ALL
-// (antes la fila parcial de la búsqueda podía pisar FECHA ENTREGA REAL, etc.)
-// Mantiene OS/Descuentos/Pago retiro/Adjuntos/Graduación/Entrega.
+// ===== Buscar trabajos + Modal clarito — v3.3.2 =====
+// Fix: normalización de claves usa N() (limpia NBSP/diacríticos) para
+//      que "Fecha entrega real" siempre machee y se vea en el modal.
 
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
@@ -12,13 +11,17 @@ const LIVE_MIN_CHARS = 2;
 const $ = (q,root=document)=>root.querySelector(q);
 const $$= (q,root=document)=>Array.from(root.querySelectorAll(q));
 const S  = v => v==null ? '' : String(v);
-const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ')
-                    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+// Limpia NBSP, caracteres invisibles y acentos, y pasa a MAYÚSCULAS
+const N  = s => S(s)
+  .replace(/[\u00A0\u2000-\u200D\uFEFF]/g,' ')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .toUpperCase();
 const buster = ()=>'_t='+Date.now();
 const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
   .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 function debounce(fn, delay = 300) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
-const normKey = k => S(k).trim().toLowerCase();
+// ⬇ clave normalizada: ahora usa N()
+const normKey = k => N(k).trim();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
 const isURL = v => /^https?:\/\//i.test(S(v));
 const parseMoneyLike = x => Number(S(x).replace(/[^\d.-]/g,''))||0;
@@ -81,7 +84,7 @@ const MAP = {
   precioObraSocial: ['precio obra social','monto obra social','descuento obra social','importe obra social'],
   pagoRetiro: ['pago retiro','pago al retirar','saldo pagado','pago final','pago entrega','pago restante'],
 
-  // Entrega (ojo: incluye “Fecha entrega real”)
+  // Entrega (incluye “Fecha entrega real”)
   entregadoPor: ['entregado por','entrego','entregó'],
   fechaEntrega: ['fecha y hora','fecha entrega real','fecha entrega'],
 
@@ -207,10 +210,8 @@ function mergePreferFilled(partialRow, allRow){
   const out = {...partialRow};
   for(const k of Object.keys(allRow)){
     const vAll = allRow[k];
-    const vPar = out[k];
     const filledAll = !(vAll==null || S(vAll).trim()==='');
     if(filledAll) out[k] = vAll; // si ALL tiene algo, gana
-    // si ALL viene vacío, queda lo que ya tenía la fila parcial
   }
   return out;
 }
@@ -265,9 +266,9 @@ function openPretty(rowIn){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Entrega
+  // Entrega (ahora sí captura "Fecha entrega real" con NBSP)
   const entregadoPor  = coalesce(g(row,'entregadoPor'));
-  const fechaEntrega  = coalesce(g(row,'fechaEntrega')); // incluye "Fecha entrega real"
+  const fechaEntrega  = coalesce(g(row,'fechaEntrega')); // "Fecha y hora" o "Fecha entrega real"
 
   // Adjuntos → botón
   const fotosRaw  = coalesce(g(row,'fotos'));
