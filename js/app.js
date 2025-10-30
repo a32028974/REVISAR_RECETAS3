@@ -1,8 +1,7 @@
-// ===== Buscar trabajos + Modal clarito — v3.2 =====
-// + Obra social (nombre + monto) → resta en totales
-// + Pago al retirar → resta en totales
-// + Entregado por + Fecha y hora
-// + Adjuntos desde PDF / Drive (botón)
+// ===== Buscar trabajos + Modal clarito — v3.3 =====
+// - Enriquecimiento de fila al abrir el modal usando "all" (match por NUMERO TRABAJO).
+// - Muestra ENTREGADO POR y FECHA Y HORA aunque la búsqueda devuelva subset.
+// - Mantiene OS/Descuentos/Pago retiro/Adjuntos/Graduación.
 
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
@@ -13,13 +12,16 @@ const LIVE_MIN_CHARS = 2;
 const $ = (q,root=document)=>root.querySelector(q);
 const $$= (q,root=document)=>Array.from(root.querySelectorAll(q));
 const S  = v => v==null ? '' : String(v);
-const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ')
+                    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const buster = ()=>'_t='+Date.now();
-const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0).toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
+const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
+  .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 function debounce(fn, delay = 300) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
 const normKey = k => S(k).trim().toLowerCase();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
 const isURL = v => /^https?:\/\//i.test(S(v));
+const parseMoneyLike = x => Number(S(x).replace(/[^\d.-]/g,''))||0;
 
 function phoneLinks(raw){
   const s = S(raw).replace(/[^\d+]/g,'').trim();
@@ -32,9 +34,10 @@ function phoneLinks(raw){
 }
 
 let COLS=[], ROWS=[], ALL_HEADERS=null, ALL_ROWS=null;
+let ALL_INDEX_BY_NUM = null;        // <-- índice para enriquecer
 let SORT = { key:null, asc:true }, lastSearchId = 0;
 
-// === Mapeo (agregado: obra social, precio OS, pago retiro, entrega)
+// === Mapeo de columnas
 const MAP = {
   estado: ['listo','estado'],
   fecha: ['fecha','fecha que encarga','fecha encarga'],
@@ -73,11 +76,9 @@ const MAP = {
   distFocal: ['distancia focal (obligatorio)','distancia focal','distancia focal (df)'],
   dnp_oculta: ['dnp (oculta)','dnp oculta'],
 
-  // Obra social / descuentos extra
+  // Obra social / pagos
   obraSocial: ['obra social','plan'],
   precioObraSocial: ['precio obra social','monto obra social','descuento obra social','importe obra social'],
-
-  // Pago al retirar
   pagoRetiro: ['pago retiro','pago al retirar','saldo pagado','pago final','pago entrega','pago restante'],
 
   // Entrega
@@ -88,6 +89,7 @@ const MAP = {
   fotos: ['pdf','link pdf','url pdf','fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
 
+// === API
 async function apiColumns(){
   if(!API) throw new Error('Sin API');
   const r = await fetch(`${API}?action=columns&${buster()}`, {cache:'no-store'});
@@ -113,6 +115,26 @@ async function apiAll(){
   return { headers: j.headers, rows: j.rows };
 }
 
+// === Índice de ALL para enriquecer por número de trabajo
+function buildAllIndex(){
+  if(!ALL_HEADERS || !ALL_ROWS) { ALL_INDEX_BY_NUM=null; return; }
+  const numVariants = MAP.numero.map(normKey);
+  let numIdx = -1;
+  ALL_HEADERS.forEach((h,i)=>{ if(numVariants.includes(normKey(h))) numIdx = i; });
+  if(numIdx<0){ ALL_INDEX_BY_NUM=null; return; }
+
+  const map = new Map();
+  for(const arr of ALL_ROWS){
+    const num = S(arr[numIdx]).trim();
+    if(!num) continue;
+    const obj = {};
+    ALL_HEADERS.forEach((h,i)=>{ obj[h]=arr[i]; });
+    map.set(num, obj);
+  }
+  ALL_INDEX_BY_NUM = map;
+}
+
+// === Tabla
 function setCols(cols){
   COLS = cols.slice();
   const by = $('#by');
@@ -161,6 +183,7 @@ function renderBody(){
   $('#count').textContent = String(rows.length);
 }
 
+// === Utils modal
 function classifyEstado(s){
   s = S(s).toLowerCase();
   if(s.includes('listo') || s.includes('entregado')) return 'ok';
@@ -178,15 +201,23 @@ function g(row, canon){
   return undefined;
 }
 
-function parseMoneyLike(x){
-  return Number(S(x).replace(/[^\d.-]/g,''))||0;
-}
+// === Modal
+function openPretty(rowIn){
+  // 1) Enriquecemos la fila con ALL usando NUMERO TRABAJO
+  let merged = rowIn;
+  const numeroTemp = coalesce(g(rowIn,'numero'), rowIn['NUMERO TRABAJO'], rowIn['Número trabajo']);
+  if(ALL_INDEX_BY_NUM && numeroTemp && ALL_INDEX_BY_NUM.has(numeroTemp)){
+    merged = Object.assign({}, ALL_INDEX_BY_NUM.get(numeroTemp), rowIn);
+  }
 
-function openPretty(row){
+  // A partir de acá usamos 'row' = merged
+  const row = merged;
+
+  // Core
   const estado       = coalesce(g(row,'estado'), row['LISTO'], row['Estado']);
   const fecha        = coalesce(g(row,'fecha'));
   const fechaRetira  = coalesce(g(row,'fechaRetira'));
-  const numero       = coalesce(g(row,'numero'));
+  const numero       = coalesce(g(row,'numero'), numeroTemp);
   const dni          = coalesce(g(row,'dni'));
   const nombre       = coalesce(g(row,'nombre'));
   const telefono     = coalesce(g(row,'telefono'));
@@ -203,11 +234,9 @@ function openPretty(row){
   const descuento     = parseMoneyLike(coalesce(g(row,'descuento'),0));
   const sena          = parseMoneyLike(coalesce(g(row,'sena'),0));
 
-  // Obra social
+  // OS / Pago retiro
   const obraSocial    = coalesce(g(row,'obraSocial'));
   const precioOS      = parseMoneyLike(coalesce(g(row,'precioObraSocial'),0));
-
-  // Pago al retirar
   const pagoRetiro    = parseMoneyLike(coalesce(g(row,'pagoRetiro'),0));
 
   // Graduación
@@ -223,7 +252,7 @@ function openPretty(row){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Entrega
+  // Entrega (de ALL ahora sí entra)
   const entregadoPor  = coalesce(g(row,'entregadoPor'));
   const fechaEntrega  = coalesce(g(row,'fechaEntrega'));
 
@@ -237,7 +266,7 @@ function openPretty(row){
     else { fotosBtn.style.display = 'none'; fotosNone.style.display = 'inline'; }
   }
 
-  // Si “otro concepto” trae monto suelto
+  // Otro monto embebido
   let otroMonto = 0;
   if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
@@ -246,10 +275,7 @@ function openPretty(row){
 
   // Cálculos
   const subtotal = (precioCristal + precioArmazon + (precioOtro||otroMonto));
-  const descuentoTotal = (descuento||0);
-  const obraSocialTotal = (precioOS||0);
-  const pagoRetiroTotal = (pagoRetiro||0);
-  const saldo = Math.max(subtotal - descuentoTotal - obraSocialTotal - sena - pagoRetiroTotal, 0);
+  const saldo = Math.max(subtotal - (descuento||0) - (precioOS||0) - (sena||0) - (pagoRetiro||0), 0);
 
   // Header
   $('#estadoBadge').textContent = S(estado||'—').toUpperCase();
@@ -311,6 +337,7 @@ function openPretty(row){
 }
 function cerrarModal(){ $('#overlay').setAttribute('aria-hidden','true'); }
 
+// === Búsqueda (usa local cache si es posible)
 function localFilter(by, q, exact){
   if(!ALL_ROWS || !ALL_HEADERS) return null;
   const Q = N(q);
@@ -376,6 +403,7 @@ async function buscar({silent=false} = {}){
 
 const buscarDebounced = debounce(()=>buscar({silent:true}), DEBOUNCE_MS);
 
+// === Arranque
 window.addEventListener('DOMContentLoaded', async ()=>{
   const apiUrl = $('#apiUrl');
   if(apiUrl){
@@ -411,7 +439,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       const cols = await apiColumns();
       setCols(cols);
       const all = await apiAll();
-      if(all?.rows?.length){ ALL_HEADERS = all.headers; ALL_ROWS = all.rows; }
+      if(all?.rows?.length){
+        ALL_HEADERS = all.headers;
+        ALL_ROWS    = all.rows;
+        buildAllIndex(); // <--- arma el índice por número
+      }
       $('#status').textContent='Listo.';
     }else{
       setCols(['LISTO','FECHA','FECHA RETIRA','NUMERO TRABAJO','DOCUMENTO','APELLIDO Y NOMBRE','CRISTAL']);
