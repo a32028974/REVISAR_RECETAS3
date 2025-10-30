@@ -1,13 +1,9 @@
-// ===== Buscar trabajos + Modal clarito — v3 (completo) =====
-// - Limpio "Datos completos" (no se renderiza más)
-// - Botón de Drive en Adjuntos ("Abrir carpeta")
-// - Mantengo búsqueda en vivo, orden, filtros y mapeo flexible de columnas
+// ===== Buscar trabajos + Modal clarito — v3.1 (Drive desde columna PDF) =====
 
-// === Endpoint (pegar una vez en la caja o dejar el fallback)
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
-// === Config búsqueda en vivo
+// === Config
 const DEBOUNCE_MS = 350;
 const LIVE_MIN_CHARS = 2;
 
@@ -20,15 +16,11 @@ const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ')
 const buster = ()=>'_t='+Date.now();
 const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
   .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
-
-function debounce(fn, delay = 300) {
-  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(null,args),delay); };
-}
+function debounce(fn, delay = 300) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
 const normKey = k => S(k).trim().toLowerCase();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
 const isURL = v => /^https?:\/\//i.test(S(v));
 
-// Tel/WhatsApp clickeables
 function phoneLinks(raw){
   const s = S(raw).replace(/[^\d+]/g,'').trim();
   if(!s) return '—';
@@ -40,14 +32,10 @@ function phoneLinks(raw){
 }
 
 // === Estado
-let COLS = [];
-let ROWS = [];
-let ALL_HEADERS = null;
-let ALL_ROWS = null;
-let SORT = { key:null, asc:true };
-let lastSearchId = 0;
+let COLS=[], ROWS=[], ALL_HEADERS=null, ALL_ROWS=null;
+let SORT = { key:null, asc:true }, lastSearchId = 0;
 
-// === Mapeo flexible (todas las variantes que vi en tus hojas)
+// === Mapeo de columnas (ACTUALIZADO: incluye 'pdf')
 const MAP = {
   estado: ['listo','estado'],
   fecha: ['fecha','fecha que encarga','fecha encarga'],
@@ -81,8 +69,8 @@ const MAP = {
   distFocal: ['distancia focal (obligatorio)','distancia focal','distancia focal (df)'],
   dnp_oculta: ['dnp (oculta)','dnp oculta'],
   sena: ['seña','sena'],
-  // Links / archivos
-  fotos: ['fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
+  // FOTOS / ADJUNTOS (incluyo PDF y variantes)
+  fotos: ['pdf','link pdf','url pdf','fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
 
 // === API
@@ -179,7 +167,6 @@ function g(row, canon){
 }
 
 function openPretty(row){
-  // --- Core
   const estado       = coalesce(g(row,'estado'), row['LISTO'], row['Estado']);
   const fecha        = coalesce(g(row,'fecha'));
   const fechaRetira  = coalesce(g(row,'fechaRetira'));
@@ -216,7 +203,7 @@ function openPretty(row){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Link a fotos / Drive -> botón "Abrir carpeta"
+  // FOTOS / ADJUNTOS → Botón "Abrir carpeta" (lee columna PDF o similares)
   const fotosRaw  = coalesce(g(row,'fotos'));
   const fotosBtn  = $('#kvFotosBtn');
   const fotosNone = $('#kvFotosNone');
@@ -232,7 +219,7 @@ function openPretty(row){
     }
   }
 
-  // Si el “otro” trae un monto embebido en texto, lo uso
+  // “Otro” monto embebido
   let otroMonto = 0;
   if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
@@ -246,7 +233,7 @@ function openPretty(row){
   $('#estadoBadge').className = 'badge '+classifyEstado(estado);
   $('#noTrabajo').textContent = `Nº ${numero}`;
 
-  // Bloques existentes
+  // Bloques
   $('#kvFecha').textContent         = fecha;
   $('#kvFechaRetira').textContent   = fechaRetira;
   $('#kvDni').textContent           = dni;
@@ -265,7 +252,7 @@ function openPretty(row){
   $('#totSena').textContent         = money(sena);
   $('#totSaldo').textContent        = money(saldo);
 
-  // Datos ampliados: Teléfono, Localidad, Modalidad, Precios, etc.
+  // Extras
   const telNode = $('#kvTelefono'); if(telNode) telNode.innerHTML = phoneLinks(telefono);
   const locNode = $('#kvLocalidad'); if(locNode) locNode.textContent = localidad;
   const modNode = $('#kvModalidad'); if(modNode) modNode.textContent = modalidad;
@@ -275,21 +262,20 @@ function openPretty(row){
   const vendNode  = $('#kvVendedor');   if(vendNode)  vendNode.textContent  = vendedor || '—';
   const fpNode    = $('#kvFormaPago');  if(fpNode)    fpNode.textContent    = formaPago || '—';
 
-  // Graduación → relleno los “valueBox” del layout nuevo
+  // Graduación (valueBox)
   const set = (id,val)=>{ const n=$(id); if(n) n.textContent = S(val)||'—'; };
   set('#od_esf', od_esf); set('#od_cil', od_cil); set('#od_eje', od_eje);
   set('#oi_esf', oi_esf); set('#oi_cil', oi_cil); set('#oi_eje', oi_eje);
   set('#dnp_od', dnp_od); set('#dnp_oi', dnp_oi); set('#add', add);
   set('#dist_f', distF);  set('#dnp_occ', dnpOcc);
 
-  // Títulos
   $('#modalTitle').textContent = `Trabajo ${numero||''}`.trim();
   $('#modalSubtitle').textContent = nombre ? `Cliente: ${nombre}` : 'Vista de solo lectura';
   $('#overlay').setAttribute('aria-hidden','false');
 }
 function cerrarModal(){ $('#overlay').setAttribute('aria-hidden','true'); }
 
-// === Búsqueda (con soporte local si hay ALL cargado)
+// === Local search
 function localFilter(by, q, exact){
   if(!ALL_ROWS || !ALL_HEADERS) return null;
   const Q = N(q);
@@ -355,7 +341,7 @@ async function buscar({silent=false} = {}){
 
 const buscarDebounced = debounce(()=>buscar({silent:true}), DEBOUNCE_MS);
 
-// === Eventos / arranque
+// === Arranque
 window.addEventListener('DOMContentLoaded', async ()=>{
   const apiUrl = $('#apiUrl');
   if(apiUrl){
