@@ -307,10 +307,19 @@ function closeModal(){
 ///// WIRE-UP ////////////////////////////////////////////////////////////////
 function getUI(){
   const form = $('#form-buscar') || $('form[action="#"]') || $('form');
-  const input= $('#q') || $('#buscar') || $('input[name="buscar"]') || $('input[type="search"]') || $('input[type="text"]');
-  const btn  = $('#btn-buscar') || $$('button').find(b=>/buscar/i.test(b.textContent));
+  // 👇 intenta en orden: #q, #buscar, o el primer input de texto dentro del form
+  const input =
+    $('#q') ||
+    $('#buscar') ||
+    (form && form.querySelector('input[type="search"], input[type="text"], input')) ||
+    $('input[type="search"]') ||
+    $('input[type="text"]') ||
+    $('input');
+
+  const btn  = $('#btn-buscar') || $('#btnSearch') || $$('button').find(b=>/buscar/i.test(b.textContent));
   return { form, input, btn };
 }
+
 
 async function doSearch(q){
   uiMsg('Buscando…');
@@ -333,24 +342,29 @@ function bindUI(){
   const { form, input, btn } = getUI();
 
   // Buscar (submit o click)
-  if (form){
-    on(form, 'submit', e=>{
-      e.preventDefault();
-      doSearch((input?.value || '').trim()).catch(err=>{
-        console.error(err);
-        uiMsg('No se pudo buscar', 'error');
-      });
+if (form){
+  on(form, 'submit', e=>{
+    e.preventDefault();
+    const q = (input?.value || '').trim();
+    console.log('DEBUG → input.id=', input?.id, 'value=', q); // 👈
+    doSearch(q).catch(err=>{
+      console.error(err);
+      uiMsg('No se pudo buscar', 'error');
     });
-  }
-  if (btn){
-    on(btn, 'click', e=>{
-      e.preventDefault();
-      doSearch((input?.value || '').trim()).catch(err=>{
-        console.error(err);
-        uiMsg('No se pudo buscar', 'error');
-      });
+  });
+}
+if (btn){
+  on(btn, 'click', e=>{
+    e.preventDefault();
+    const q = (input?.value || '').trim();
+    console.log('DEBUG → input.id=', input?.id, 'value=', q); // 👈
+    doSearch(q).catch(err=>{
+      console.error(err);
+      uiMsg('No se pudo buscar', 'error');
     });
-  }
+  });
+}
+
 
   // Cerrar modal
   on($('#modal-close'), 'click', closeModal);
