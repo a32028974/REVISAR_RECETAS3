@@ -1,4 +1,9 @@
-// ===== Buscar trabajos + Modal clarito — v2 (búsqueda en vivo + “Datos completos”) =====
+// ===== Buscar trabajos + Modal clarito — v3 (completo) =====
+// - Limpio "Datos completos" (no se renderiza más)
+// - Botón de Drive en Adjuntos ("Abrir carpeta")
+// - Mantengo búsqueda en vivo, orden, filtros y mapeo flexible de columnas
+
+// === Endpoint (pegar una vez en la caja o dejar el fallback)
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
@@ -19,6 +24,20 @@ const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
 function debounce(fn, delay = 300) {
   let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(null,args),delay); };
 }
+const normKey = k => S(k).trim().toLowerCase();
+const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
+const isURL = v => /^https?:\/\//i.test(S(v));
+
+// Tel/WhatsApp clickeables
+function phoneLinks(raw){
+  const s = S(raw).replace(/[^\d+]/g,'').trim();
+  if(!s) return '—';
+  let num = s.replace(/^0+/, '').replace(/^15/, '');
+  if(!num.startsWith('+54') && !num.startsWith('54')) num = '54'+num.replace(/^\+/, '');
+  const telHref = `tel:+${num.replace(/^(\+?)/,'')}`;
+  const waHref  = `https://wa.me/${num.replace(/^\+/, '')}`;
+  return `<a href="${telHref}">${s}</a> &nbsp;·&nbsp; <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
+}
 
 // === Estado
 let COLS = [];
@@ -28,7 +47,7 @@ let ALL_ROWS = null;
 let SORT = { key:null, asc:true };
 let lastSearchId = 0;
 
-// === Mapeo flexible (agrego TODO lo del formulario v05)
+// === Mapeo flexible (todas las variantes que vi en tus hojas)
 const MAP = {
   estado: ['listo','estado'],
   fecha: ['fecha','fecha que encarga','fecha encarga'],
@@ -65,25 +84,6 @@ const MAP = {
   // Links / archivos
   fotos: ['fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
-const normKey = k => S(k).trim().toLowerCase();
-const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
-
-const isURL = v => /^https?:\/\//i.test(S(v));
-const linkify = v => {
-  const s = S(v).trim();
-  if(!s) return '—';
-  return isURL(s) ? `<a href="${s}" target="_blank" rel="noopener">${s}</a>` : s;
-};
-function phoneLinks(raw){
-  const s = S(raw).replace(/[^\d+]/g,'').trim();
-  if(!s) return '—';
-  // normalizo Argentina: si empieza con 0/15 los saco; si no tiene +54, lo agrego.
-  let num = s.replace(/^0+/, '').replace(/^15/, '');
-  if(!num.startsWith('+54') && !num.startsWith('54')) num = '54'+num.replace(/^\+/, '');
-  const telHref = `tel:+${num.replace(/^(\+?)/,'')}`;
-  const waHref  = `https://wa.me/${num.replace(/^\+/, '')}`;
-  return `<a href="${telHref}">${s}</a> &nbsp;·&nbsp; <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
-}
 
 // === API
 async function apiColumns(){
@@ -111,7 +111,7 @@ async function apiAll(){
   return { headers: j.headers, rows: j.rows };
 }
 
-// === UI tabla
+// === Tabla
 function setCols(cols){
   COLS = cols.slice();
   const by = $('#by');
@@ -177,8 +177,9 @@ function g(row, canon){
   }
   return undefined;
 }
+
 function openPretty(row){
-  // Core
+  // --- Core
   const estado       = coalesce(g(row,'estado'), row['LISTO'], row['Estado']);
   const fecha        = coalesce(g(row,'fecha'));
   const fechaRetira  = coalesce(g(row,'fechaRetira'));
@@ -189,18 +190,18 @@ function openPretty(row){
   const localidad    = coalesce(g(row,'localidad'));
   const modalidad    = coalesce(g(row,'modalidad'));
 
-  const cristal      = coalesce(g(row,'cristal'));
-  const precioCristal= Number(S(coalesce(g(row,'precioCristal'),0)).replace(/[^\d.-]/g,''))||0;
-  const nAnteojo     = coalesce(g(row,'nAnteojo'));
-  const precioArmazon= Number(S(coalesce(g(row,'precioArmazon'),0)).replace(/[^\d.-]/g,''))||0;
-  const detArmazon   = coalesce(g(row,'detArmazon'));
-  const otro         = S(coalesce(g(row,'otro'),'')).trim();
-  const precioOtro   = Number(S(coalesce(g(row,'precioOtro'),0)).replace(/[^\d.-]/g,''))||0;
-  const descuento    = Number(S(coalesce(g(row,'descuento'),0)).replace(/[^\d.-]/g,''))||0;
+  const cristal       = coalesce(g(row,'cristal'));
+  const precioCristal = Number(S(coalesce(g(row,'precioCristal'),0)).replace(/[^\d.-]/g,''))||0;
+  const nAnteojo      = coalesce(g(row,'nAnteojo'));
+  const precioArmazon = Number(S(coalesce(g(row,'precioArmazon'),0)).replace(/[^\d.-]/g,''))||0;
+  const detArmazon    = coalesce(g(row,'detArmazon'));
+  const otro          = S(coalesce(g(row,'otro'),'')).trim();
+  const precioOtro    = Number(S(coalesce(g(row,'precioOtro'),0)).replace(/[^\d.-]/g,''))||0;
+  const descuento     = Number(S(coalesce(g(row,'descuento'),0)).replace(/[^\d.-]/g,''))||0;
 
-  const sena         = Number(S(coalesce(g(row,'sena'),0)).replace(/[^\d.-]/g,''))||0;
-  const vendedor     = coalesce(g(row,'vendedor'));
-  const formaPago    = coalesce(g(row,'formaPago'));
+  const sena          = Number(S(coalesce(g(row,'sena'),0)).replace(/[^\d.-]/g,''))||0;
+  const vendedor      = coalesce(g(row,'vendedor'));
+  const formaPago     = coalesce(g(row,'formaPago'));
 
   // Graduación
   const od_esf = coalesce(g(row,'od_esf'));
@@ -215,11 +216,23 @@ function openPretty(row){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Fotos / links
-  const fotosLinkRaw = coalesce(g(row,'fotos'));
-  const fotosLink = linkify(fotosLinkRaw);
+  // Link a fotos / Drive -> botón "Abrir carpeta"
+  const fotosRaw  = coalesce(g(row,'fotos'));
+  const fotosBtn  = $('#kvFotosBtn');
+  const fotosNone = $('#kvFotosNone');
+  if (fotosBtn && fotosNone) {
+    const url = S(fotosRaw).trim();
+    if (url && isURL(url)) {
+      fotosBtn.href = url;
+      fotosBtn.style.display = 'inline-block';
+      fotosNone.style.display = 'none';
+    } else {
+      fotosBtn.style.display = 'none';
+      fotosNone.style.display = 'inline';
+    }
+  }
 
-  // “Otro” monto embebido en texto
+  // Si el “otro” trae un monto embebido en texto, lo uso
   let otroMonto = 0;
   if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
@@ -252,40 +265,22 @@ function openPretty(row){
   $('#totSena').textContent         = money(sena);
   $('#totSaldo').textContent        = money(saldo);
 
-  // === NUEVO: datos ampliados
-  // Teléfono (clickeable Tel + WhatsApp)
-  const telNode = $('#kvTelefono');
-  if(telNode) telNode.innerHTML = phoneLinks(telefono);
-
+  // Datos ampliados: Teléfono, Localidad, Modalidad, Precios, etc.
+  const telNode = $('#kvTelefono'); if(telNode) telNode.innerHTML = phoneLinks(telefono);
   const locNode = $('#kvLocalidad'); if(locNode) locNode.textContent = localidad;
   const modNode = $('#kvModalidad'); if(modNode) modNode.textContent = modalidad;
 
-  // Precio otro / Descuento / Forma de pago / Vendedor
   const pOtroNode = $('#kvPrecioOtro'); if(pOtroNode) pOtroNode.textContent = precioOtro ? money(precioOtro) : '—';
   const descNode  = $('#kvDescuento');  if(descNode)  descNode.textContent  = descuento ? `– ${money(descuento)}` : '—';
   const vendNode  = $('#kvVendedor');   if(vendNode)  vendNode.textContent  = vendedor || '—';
   const fpNode    = $('#kvFormaPago');  if(fpNode)    fpNode.textContent    = formaPago || '—';
 
-  // Graduación
+  // Graduación → relleno los “valueBox” del layout nuevo
   const set = (id,val)=>{ const n=$(id); if(n) n.textContent = S(val)||'—'; };
   set('#od_esf', od_esf); set('#od_cil', od_cil); set('#od_eje', od_eje);
   set('#oi_esf', oi_esf); set('#oi_cil', oi_cil); set('#oi_eje', oi_eje);
   set('#dnp_od', dnp_od); set('#dnp_oi', dnp_oi); set('#add', add);
   set('#dist_f', distF);  set('#dnp_occ', dnpOcc);
-
-  // Link a fotos / Drive
-  const fotosNode = $('#kvFotos'); if(fotosNode) fotosNode.innerHTML = fotosLink;
-
-  // === “Datos completos” (lista cada columna/valor tal como vienen)
-  const box = $('#extraAll');
-  if(box){
-    const entries = Object.entries(row);
-    const html = entries.map(([k,v])=>{
-      const val = isURL(v) ? `<a href="${v}" target="_blank" rel="noopener">${v}</a>` : S(v)||'—';
-      return `<div class="pair"><span class="k">${S(k)}</span><span class="v">${val}</span></div>`;
-    }).join('');
-    box.innerHTML = html || '<div class="muted">Sin datos</div>';
-  }
 
   // Títulos
   $('#modalTitle').textContent = `Trabajo ${numero||''}`.trim();
