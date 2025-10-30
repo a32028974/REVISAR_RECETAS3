@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Buscar trabajos • Óptica Cristal</title>
   <link rel="icon" href="logo.png" />
+  <!-- Mantengo misma ruta de tu proyecto -->
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -12,7 +13,7 @@
     <header class="card">
       <div class="toolbar">
         <img src="logo.png" alt="" class="logo" onerror="this.style.display='none'">
-        <h1>Buscar trabajos v3</h1>
+        <h1>Buscar trabajos v4</h1>
         <span class="spacer"></span>
         <small class="muted">Hoja: <b>Carga de trabajos</b></small>
       </div>
@@ -48,7 +49,7 @@
     </div>
   </div>
 
-  <!-- Modal bonito -->
+  <!-- Modal clarito -->
   <div id="overlay" class="overlay" aria-hidden="true">
     <div class="modal card">
       <div class="toolbar">
@@ -57,7 +58,7 @@
           <small id="modalSubtitle" class="muted">Vista de solo lectura</small>
         </div>
         <span class="spacer"></span>
-        <button id="modalClose" class="btn ghost">✕</button>
+        <button id="modalClose" class="btn ghost" title="Cerrar">✕</button>
       </div>
 
       <div id="pretty" class="pretty">
@@ -67,7 +68,7 @@
           <div class="noTrabajo" id="noTrabajo">Nº —</div>
         </section>
 
-        <!-- Bloques -->
+        <!-- Fechas / Paciente -->
         <section class="grid two">
           <div class="block">
             <h4>Fechas</h4>
@@ -81,13 +82,14 @@
             <div class="kv">
               <div>Documento:</div><div id="kvDni">—</div>
               <div>Apellido y nombre:</div><div id="kvNombre">—</div>
-              <li><span>Teléfono:</span> <span id="kvTelefono">—</span></li>
-<li><span>Localidad:</span> <span id="kvLocalidad">—</span></li>
-<li><span>Modalidad:</span> <span id="kvModalidad">—</span></li>
+              <div>Teléfono:</div><div id="kvTelefono">—</div>
+              <div>Localidad:</div><div id="kvLocalidad">—</div>
+              <div>Modalidad:</div><div id="kvModalidad">—</div>
             </div>
           </div>
         </section>
 
+        <!-- Lentes / Otros -->
         <section class="grid two">
           <div class="block">
             <h4>Lentes / Armazón</h4>
@@ -97,10 +99,10 @@
               <div>Nº armazón:</div><div id="kvNA">—</div>
               <div>Precio armazón:</div><div id="kvPrecioArmazon">$ 0</div>
               <div>Detalle armazón:</div><div id="kvDetArmazon">—</div>
-              <li><span>Precio otro:</span> <span id="kvPrecioOtro">—</span></li>
-<li><span>Descuento:</span> <span id="kvDescuento">—</span></li>
-<li><span>Vendedor:</span> <span id="kvVendedor">—</span></li>
-<li><span>Forma de pago:</span> <span id="kvFormaPago">—</span></li>
+              <div>Precio otro:</div><div id="kvPrecioOtro">—</div>
+              <div>Descuento:</div><div id="kvDescuento">—</div>
+              <div>Vendedor:</div><div id="kvVendedor">—</div>
+              <div>Forma de pago:</div><div id="kvFormaPago">—</div>
             </div>
           </div>
           <div class="block">
@@ -111,28 +113,35 @@
             </div>
           </div>
         </section>
-<div class="card">
-  <div class="card-title">Fotos / Adjuntos</div>
-  <div class="kv"><span>Carpeta / vínculo:</span> <span id="kvFotos">—</span></div>
-</div>
 
-<!-- Bloque Graduación (si querés verlo en el modal) -->
-<div class="card">
-  <div class="card-title">Graduación</div>
-  <div class="grid-2">
-    <div class="kv"><span>OD ESF</span><span id="od_esf">—</span></div>
-    <div class="kv"><span>OI ESF</span><span id="oi_esf">—</span></div>
-    <div class="kv"><span>OD CIL</span><span id="od_cil">—</span></div>
-    <div class="kv"><span>OI CIL</span><span id="oi_cil">—</span></div>
-    <div class="kv"><span>OD EJE</span><span id="od_eje">—</span></div>
-    <div class="kv"><span>OI EJE</span><span id="oi_eje">—</span></div>
-    <div class="kv"><span>DNP (OD)</span><span id="dnp_od">—</span></div>
-    <div class="kv"><span>DNP (OI)</span><span id="dnp_oi">—</span></div>
-    <div class="kv"><span>ADD</span><span id="add">—</span></div>
-    <div class="kv"><span>Dist. focal</span><span id="dist_f">—</span></div>
-    <div class="kv"><span>DNP (oculta)</span><span id="dnp_occ">—</span></div>
-  </div>
-</div>
+        <!-- Fotos / Adjuntos -->
+        <section class="block">
+          <h4>Fotos / Adjuntos</h4>
+          <div class="kv">
+            <div>Carpeta / vínculo:</div><div id="kvFotos">—</div>
+          </div>
+        </section>
+
+        <!-- Graduación -->
+        <section class="block">
+          <h4>Graduación</h4>
+          <div class="grid two">
+            <div class="kv">
+              <div>OD ESF</div><div id="od_esf">—</div>
+              <div>OD CIL</div><div id="od_cil">—</div>
+              <div>OD EJE</div><div id="od_eje">—</div>
+              <div>OI ESF</div><div id="oi_esf">—</div>
+              <div>OI CIL</div><div id="oi_cil">—</div>
+              <div>OI EJE</div><div id="oi_eje">—</div>
+              <div>DNP (OD)</div><div id="dnp_od">—</div>
+              <div>DNP (OI)</div><div id="dnp_oi">—</div>
+              <div>ADD</div><div id="add">—</div>
+              <div>Dist. focal</div><div id="dist_f">—</div>
+              <div>DNP (oculta)</div><div id="dnp_occ">—</div>
+            </div>
+          </div>
+        </section>
+
         <!-- Totales -->
         <section class="totales">
           <div class="row"><span>Subtotal</span><b id="totSubtotal">$ 0</b></div>
@@ -142,10 +151,8 @@
       </div>
     </div>
   </div>
-<div class="card">
-  <div class="card-title">Datos completos (todas las columnas)</div>
-  <div id="extraAll" class="pairs-grid"></div>
-</div>
+
+  <!-- Mantengo tu JS sin cambios -->
   <script src="js/app.js"></script>
 </body>
 </html>
