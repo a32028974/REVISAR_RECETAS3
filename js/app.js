@@ -1,6 +1,7 @@
-// ===== Buscar trabajos + Modal clarito — v3.3.2 =====
-// Fix: normalización de claves usa N() (limpia NBSP/diacríticos) para
-//      que "Fecha entrega real" siempre machee y se vea en el modal.
+// ===== Buscar trabajos + Modal clarito — v3.4.0 =====
+// - Captura robusta de "Fecha entrega real" (NBSP, acentos, variantes)
+// - Cruce opcional con hoja Pagos via action=pagos&numero=...
+// - Recalcula saldo con pagos y completa "Entregado por" + "Fecha y hora" si faltaban
 
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
@@ -11,7 +12,7 @@ const LIVE_MIN_CHARS = 2;
 const $ = (q,root=document)=>root.querySelector(q);
 const $$= (q,root=document)=>Array.from(root.querySelectorAll(q));
 const S  = v => v==null ? '' : String(v);
-// Limpia NBSP, caracteres invisibles y acentos, y pasa a MAYÚSCULAS
+// Limpia NBSP, invisibles y acentos; mayúsculas
 const N  = s => S(s)
   .replace(/[\u00A0\u2000-\u200D\uFEFF]/g,' ')
   .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -20,7 +21,6 @@ const buster = ()=>'_t='+Date.now();
 const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
   .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 function debounce(fn, delay = 300) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
-// ⬇ clave normalizada: ahora usa N()
 const normKey = k => N(k).trim();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
 const isURL = v => /^https?:\/\//i.test(S(v));
@@ -116,6 +116,17 @@ async function apiAll(){
   const j = await r.json();
   if(!j?.ok) return null;
   return { headers: j.headers, rows: j.rows };
+}
+// —— Pagos por número (opcional). Estructura esperada:
+// { ok:true, pagos:[{fechaHora:'dd/mm/aaaa hh:mm', numero:'', importe:12345, vendedor:'', fdm:'', fdmOtro:''}, ...] }
+async function apiPagosByNumero(numero){
+  try{
+    if(!API || !numero) return null;
+    const r = await fetch(`${API}?action=pagos&numero=${encodeURIComponent(numero)}&${buster()}`, {cache:'no-store'});
+    const j = await r.json();
+    if(!j?.ok || !Array.isArray(j.pagos)) return null;
+    return j.pagos;
+  }catch{ return null; }
 }
 
 // ===== Índice por número para enriquecer =====
@@ -217,8 +228,8 @@ function mergePreferFilled(partialRow, allRow){
 }
 
 // ===== Modal =====
-function openPretty(rowIn){
-  // Enriquecer con ALL por número de trabajo (prioriza valores NO vacíos de ALL)
+async function openPretty(rowIn){
+  // Enriquecer con ALL por número de trabajo
   let merged = rowIn;
   const numeroTemp = coalesce(g(rowIn,'numero'), rowIn['NUMERO TRABAJO'], rowIn['Número trabajo']);
   if(ALL_INDEX_BY_NUM && numeroTemp && ALL_INDEX_BY_NUM.has(numeroTemp)){
@@ -251,7 +262,7 @@ function openPretty(rowIn){
   // OS / Pago retiro
   const obraSocial    = coalesce(g(row,'obraSocial'));
   const precioOS      = parseMoneyLike(coalesce(g(row,'precioObraSocial'),0));
-  const pagoRetiro    = parseMoneyLike(coalesce(g(row,'pagoRetiro'),0));
+  let pagoRetiro      = parseMoneyLike(coalesce(g(row,'pagoRetiro'),0));
 
   // Graduación
   const od_esf = coalesce(g(row,'od_esf'));
@@ -266,9 +277,9 @@ function openPretty(rowIn){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // Entrega (ahora sí captura "Fecha entrega real" con NBSP)
-  const entregadoPor  = coalesce(g(row,'entregadoPor'));
-  const fechaEntrega  = coalesce(g(row,'fechaEntrega')); // "Fecha y hora" o "Fecha entrega real"
+  // Entrega
+  let entregadoPor  = coalesce(g(row,'entregadoPor'));
+  let fechaEntrega  = coalesce(g(row,'fechaEntrega')); // "Fecha y hora" o "Fecha entrega real"
 
   // Adjuntos → botón
   const fotosRaw  = coalesce(g(row,'fotos'));
@@ -280,17 +291,42 @@ function openPretty(rowIn){
     else { fotosBtn.style.display = 'none'; fotosNone.style.display = 'inline'; }
   }
 
-  // Otro monto embebido
+  // Otro monto embebido del texto
   let otroMonto = 0;
   if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
     if(m) otroMonto = Number(m.at(-1).replace(/[^\d.-]/g,''))||0;
   }
 
-  // Cálculos
+  // Cálculo base
   const subtotal = (precioCristal + precioArmazon + (precioOtro||otroMonto));
+
+  // ===== Cruce con "Pagos" (si existe endpoint) =====
+  let sumaPagos = 0;
+  try{
+    const pagos = await apiPagosByNumero(numero);
+    if(Array.isArray(pagos) && pagos.length){
+      // Suma todos los importes de ese número
+      sumaPagos = pagos.reduce((acc,p)=> acc + (Number(S(p.importe).replace(/[^\d.-]/g,''))||0), 0);
+
+      // Si no teníamos entrega y el último pago trae datos, los usamos
+      const last = pagos[pagos.length-1];
+      if(!entregadoPor && last?.vendedor) entregadoPor = last.vendedor;
+      if(!fechaEntrega && last?.fechaHora) fechaEntrega = last.fechaHora;
+
+      // Si no había "pago al retirar", lo inferimos desde la suma de pagos - seña (mín 0)
+      if(!pagoRetiro && sumaPagos > 0){
+        // Priorizamos mostrar "Pago al retirar" como pagos adicionales a la seña
+        const extra = Math.max(sumaPagos - sena, 0);
+        if(extra>0) pagoRetiro = extra;
+      }
+    }
+  }catch{ /* noop */ }
+
+  // Saldo final
   const saldo = Math.max(subtotal - (descuento||0) - (precioOS||0) - (sena||0) - (pagoRetiro||0), 0);
 
+  // ===== Render =====
   // Header
   $('#estadoBadge').textContent = S(estado||'—').toUpperCase();
   $('#estadoBadge').className = 'badge '+classifyEstado(estado);
@@ -320,7 +356,7 @@ function openPretty(rowIn){
   // OS + Pago retiro + Entrega
   $('#kvObraSocial').textContent    = obraSocial || '—';
   $('#kvPrecioOS').textContent      = precioOS ? `– ${money(precioOS)}` : '—';
-  $('#kvPagoRetiro').textContent    = pagoRetiro ? `– ${money(pagoRetiro)}` : '—';
+  $('#kvPagoRetiro').textContent    = pagoRetiro ? `– ${money(pagoRetiro)}` : (sumaPagos? `– ${money(Math.max(sumaPagos - sena, 0))}` : '—');
   $('#kvEntregadoPor').textContent  = entregadoPor || '—';
   $('#kvFechaEntrega').textContent  = fechaEntrega || '—';
 
@@ -341,7 +377,7 @@ function openPretty(rowIn){
   $('#totDesc').textContent      = descuento ? `– ${money(descuento)}` : '—';
   $('#totOS').textContent        = precioOS ? `– ${money(precioOS)}` : '—';
   $('#totSena').textContent      = money(sena);
-  $('#totPagoRetiro').textContent= pagoRetiro ? `– ${money(pagoRetiro)}` : '—';
+  $('#totPagoRetiro').textContent= pagoRetiro ? `– ${money(pagoRetiro)}` : (sumaPagos? `– ${money(Math.max(sumaPagos - sena, 0))}` : '—');
   $('#totSaldo').textContent     = money(saldo);
 
   // Títulos
