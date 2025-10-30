@@ -65,7 +65,7 @@ async function fetchJSON(url){
 async function apiSearch(term){
   // 1) search con parámetro correcto `texto`
   try {
-    const u = `${API}?action=search&texto=${encodeURIComponent(term||'')}`;
+const u = `${API}?action=search&texto=${encodeURIComponent(term||'')}`;
     const j = await fetchJSON(u);
     const headers = j.headers || j.columns || j.encabezados || [];
     const rows    = j.rows    || j.items   || j.data        || [];
