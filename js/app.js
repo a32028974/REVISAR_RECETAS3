@@ -307,7 +307,7 @@ function closeModal(){
 ///// WIRE-UP ////////////////////////////////////////////////////////////////
 function getUI(){
   const form = $('#form-buscar') || $('form[action="#"]') || $('form');
-  const input= $('#buscar') || $('input[name="buscar"]') || $('input[type="search"]') || $('input[type="text"]');
+  const input= $('#q') || $('#buscar') || $('input[name="buscar"]') || $('input[type="search"]') || $('input[type="text"]');
   const btn  = $('#btn-buscar') || $$('button').find(b=>/buscar/i.test(b.textContent));
   return { form, input, btn };
 }
