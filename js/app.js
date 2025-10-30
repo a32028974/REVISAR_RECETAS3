@@ -1,21 +1,21 @@
-// ===== Buscar trabajos + Modal clarito — v3.1 (Drive desde columna PDF) =====
+// ===== Buscar trabajos + Modal clarito — v3.2 =====
+// + Obra social (nombre + monto) → resta en totales
+// + Pago al retirar → resta en totales
+// + Entregado por + Fecha y hora
+// + Adjuntos desde PDF / Drive (botón)
 
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
-// === Config
 const DEBOUNCE_MS = 350;
 const LIVE_MIN_CHARS = 2;
 
-// === Helpers
 const $ = (q,root=document)=>root.querySelector(q);
 const $$= (q,root=document)=>Array.from(root.querySelectorAll(q));
 const S  = v => v==null ? '' : String(v);
-const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ')
-                    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+const N  = s => S(s).replace(/[\u00A0\u200B-\u200D\uFEFF]/g,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const buster = ()=>'_t='+Date.now();
-const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0)
-  .toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
+const money = v => (Number(S(v).replace(/[^\d.-]/g,''))||0).toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
 function debounce(fn, delay = 300) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
 const normKey = k => S(k).trim().toLowerCase();
 const coalesce = (...xs)=> xs.find(x => x!=null && String(x).trim()!=='') ?? '—';
@@ -31,11 +31,10 @@ function phoneLinks(raw){
   return `<a href="${telHref}">${s}</a> &nbsp;·&nbsp; <a href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>`;
 }
 
-// === Estado
 let COLS=[], ROWS=[], ALL_HEADERS=null, ALL_ROWS=null;
 let SORT = { key:null, asc:true }, lastSearchId = 0;
 
-// === Mapeo de columnas (ACTUALIZADO: incluye 'pdf')
+// === Mapeo (agregado: obra social, precio OS, pago retiro, entrega)
 const MAP = {
   estado: ['listo','estado'],
   fecha: ['fecha','fecha que encarga','fecha encarga'],
@@ -46,16 +45,21 @@ const MAP = {
   nombre: ['apellido y nombre','apellido','nombre y apellido','paciente'],
   telefono: ['telefono','teléfono','celular'],
   localidad: ['localidad','ciudad','barrio'],
+
   cristal: ['cristal','tipo de cristal'],
   precioCristal: ['precio cristal'],
   nAnteojo: ['n anteojo','nº anteojo','n armazon','nº armazón','armazon n','numero armazon'],
   precioArmazon: ['precio armazon','precio armazón'],
   detArmazon: ['detalle armazon','detalle armazón','modelo / marca','marca / modelo','detalle','detalle armazon (marca y modelo)'],
+
   otro: ['otro concepto','concepto','concepto negativo'],
   precioOtro: ['precio otro','monto otro'],
-  descuento: ['descuento'],
+  descuento: ['descuento','descuento efectivo'],
+
   vendedor: ['vendedor'],
   formaPago: ['forma de pago','pago','fp'],
+  sena: ['seña','sena'],
+
   // Graduación
   od_esf: ['od esf','od esf.','od esf (lejos)','od esf (dist)'],
   od_cil: ['od cil','od cil.'],
@@ -68,12 +72,22 @@ const MAP = {
   add: ['add'],
   distFocal: ['distancia focal (obligatorio)','distancia focal','distancia focal (df)'],
   dnp_oculta: ['dnp (oculta)','dnp oculta'],
-  sena: ['seña','sena'],
-  // FOTOS / ADJUNTOS (incluyo PDF y variantes)
+
+  // Obra social / descuentos extra
+  obraSocial: ['obra social','plan'],
+  precioObraSocial: ['precio obra social','monto obra social','descuento obra social','importe obra social'],
+
+  // Pago al retirar
+  pagoRetiro: ['pago retiro','pago al retirar','saldo pagado','pago final','pago entrega','pago restante'],
+
+  // Entrega
+  entregadoPor: ['entregado por','entrego','entregó'],
+  fechaEntrega: ['fecha y hora','fecha entrega real','fecha entrega'],
+
+  // Adjuntos
   fotos: ['pdf','link pdf','url pdf','fotos drive','link drive','fotos','imagenes drive','galeria','carpeta fotos','url fotos']
 };
 
-// === API
 async function apiColumns(){
   if(!API) throw new Error('Sin API');
   const r = await fetch(`${API}?action=columns&${buster()}`, {cache:'no-store'});
@@ -99,7 +113,6 @@ async function apiAll(){
   return { headers: j.headers, rows: j.rows };
 }
 
-// === Tabla
 function setCols(cols){
   COLS = cols.slice();
   const by = $('#by');
@@ -148,7 +161,6 @@ function renderBody(){
   $('#count').textContent = String(rows.length);
 }
 
-// === Modal
 function classifyEstado(s){
   s = S(s).toLowerCase();
   if(s.includes('listo') || s.includes('entregado')) return 'ok';
@@ -166,6 +178,10 @@ function g(row, canon){
   return undefined;
 }
 
+function parseMoneyLike(x){
+  return Number(S(x).replace(/[^\d.-]/g,''))||0;
+}
+
 function openPretty(row){
   const estado       = coalesce(g(row,'estado'), row['LISTO'], row['Estado']);
   const fecha        = coalesce(g(row,'fecha'));
@@ -178,17 +194,21 @@ function openPretty(row){
   const modalidad    = coalesce(g(row,'modalidad'));
 
   const cristal       = coalesce(g(row,'cristal'));
-  const precioCristal = Number(S(coalesce(g(row,'precioCristal'),0)).replace(/[^\d.-]/g,''))||0;
+  const precioCristal = parseMoneyLike(coalesce(g(row,'precioCristal'),0));
   const nAnteojo      = coalesce(g(row,'nAnteojo'));
-  const precioArmazon = Number(S(coalesce(g(row,'precioArmazon'),0)).replace(/[^\d.-]/g,''))||0;
+  const precioArmazon = parseMoneyLike(coalesce(g(row,'precioArmazon'),0));
   const detArmazon    = coalesce(g(row,'detArmazon'));
   const otro          = S(coalesce(g(row,'otro'),'')).trim();
-  const precioOtro    = Number(S(coalesce(g(row,'precioOtro'),0)).replace(/[^\d.-]/g,''))||0;
-  const descuento     = Number(S(coalesce(g(row,'descuento'),0)).replace(/[^\d.-]/g,''))||0;
+  const precioOtro    = parseMoneyLike(coalesce(g(row,'precioOtro'),0));
+  const descuento     = parseMoneyLike(coalesce(g(row,'descuento'),0));
+  const sena          = parseMoneyLike(coalesce(g(row,'sena'),0));
 
-  const sena          = Number(S(coalesce(g(row,'sena'),0)).replace(/[^\d.-]/g,''))||0;
-  const vendedor      = coalesce(g(row,'vendedor'));
-  const formaPago     = coalesce(g(row,'formaPago'));
+  // Obra social
+  const obraSocial    = coalesce(g(row,'obraSocial'));
+  const precioOS      = parseMoneyLike(coalesce(g(row,'precioObraSocial'),0));
+
+  // Pago al retirar
+  const pagoRetiro    = parseMoneyLike(coalesce(g(row,'pagoRetiro'),0));
 
   // Graduación
   const od_esf = coalesce(g(row,'od_esf'));
@@ -203,79 +223,94 @@ function openPretty(row){
   const distF  = coalesce(g(row,'distFocal'));
   const dnpOcc = coalesce(g(row,'dnp_oculta'));
 
-  // FOTOS / ADJUNTOS → Botón "Abrir carpeta" (lee columna PDF o similares)
+  // Entrega
+  const entregadoPor  = coalesce(g(row,'entregadoPor'));
+  const fechaEntrega  = coalesce(g(row,'fechaEntrega'));
+
+  // Adjuntos → botón
   const fotosRaw  = coalesce(g(row,'fotos'));
   const fotosBtn  = $('#kvFotosBtn');
   const fotosNone = $('#kvFotosNone');
   if (fotosBtn && fotosNone) {
     const url = S(fotosRaw).trim();
-    if (url && isURL(url)) {
-      fotosBtn.href = url;
-      fotosBtn.style.display = 'inline-block';
-      fotosNone.style.display = 'none';
-    } else {
-      fotosBtn.style.display = 'none';
-      fotosNone.style.display = 'inline';
-    }
+    if (url && isURL(url)) { fotosBtn.href = url; fotosBtn.style.display = 'inline-block'; fotosNone.style.display = 'none'; }
+    else { fotosBtn.style.display = 'none'; fotosNone.style.display = 'inline'; }
   }
 
-  // “Otro” monto embebido
+  // Si “otro concepto” trae monto suelto
   let otroMonto = 0;
   if(!precioOtro && /\$|\d/.test(otro)){
     const m = otro.match(/(-?\d[\d.]*)/g);
     if(m) otroMonto = Number(m.at(-1).replace(/[^\d.-]/g,''))||0;
   }
-  const subtotal = (precioCristal + precioArmazon + (precioOtro||otroMonto)) - (descuento||0);
-  const saldo    = Math.max(subtotal - sena, 0);
+
+  // Cálculos
+  const subtotal = (precioCristal + precioArmazon + (precioOtro||otroMonto));
+  const descuentoTotal = (descuento||0);
+  const obraSocialTotal = (precioOS||0);
+  const pagoRetiroTotal = (pagoRetiro||0);
+  const saldo = Math.max(subtotal - descuentoTotal - obraSocialTotal - sena - pagoRetiroTotal, 0);
 
   // Header
   $('#estadoBadge').textContent = S(estado||'—').toUpperCase();
   $('#estadoBadge').className = 'badge '+classifyEstado(estado);
   $('#noTrabajo').textContent = `Nº ${numero}`;
 
-  // Bloques
+  // Fechas / Paciente
   $('#kvFecha').textContent         = fecha;
   $('#kvFechaRetira').textContent   = fechaRetira;
   $('#kvDni').textContent           = dni;
   $('#kvNombre').textContent        = nombre;
 
+  // Lentes
   $('#kvCristal').textContent       = cristal;
   $('#kvPrecioCristal').textContent = money(precioCristal);
   $('#kvNA').textContent            = nAnteojo;
   $('#kvPrecioArmazon').textContent = money(precioArmazon);
   $('#kvDetArmazon').textContent    = detArmazon;
 
+  // Otros
   $('#kvOtro').textContent          = otro || '—';
   $('#kvSena').textContent          = money(sena);
+  $('#kvPrecioOtro').textContent    = precioOtro ? money(precioOtro) : (otroMonto? money(otroMonto) : '—');
+  $('#kvDescuento').textContent     = descuento ? `– ${money(descuento)}` : '—';
+  $('#kvVendedor').textContent      = coalesce(g(row,'vendedor'));
+  $('#kvFormaPago').textContent     = coalesce(g(row,'formaPago'));
 
-  $('#totSubtotal').textContent     = money(subtotal);
-  $('#totSena').textContent         = money(sena);
-  $('#totSaldo').textContent        = money(saldo);
+  // OS + Pago retiro + Entrega
+  $('#kvObraSocial').textContent    = obraSocial || '—';
+  $('#kvPrecioOS').textContent      = precioOS ? `– ${money(precioOS)}` : '—';
+  $('#kvPagoRetiro').textContent    = pagoRetiro ? `– ${money(pagoRetiro)}` : '—';
+  $('#kvEntregadoPor').textContent  = entregadoPor || '—';
+  $('#kvFechaEntrega').textContent  = fechaEntrega || '—';
 
-  // Extras
+  // Teléfono, localidad, modalidad
   const telNode = $('#kvTelefono'); if(telNode) telNode.innerHTML = phoneLinks(telefono);
-  const locNode = $('#kvLocalidad'); if(locNode) locNode.textContent = localidad;
-  const modNode = $('#kvModalidad'); if(modNode) modNode.textContent = modalidad;
+  $('#kvLocalidad').textContent = localidad || '—';
+  $('#kvModalidad').textContent = modalidad || '—';
 
-  const pOtroNode = $('#kvPrecioOtro'); if(pOtroNode) pOtroNode.textContent = precioOtro ? money(precioOtro) : '—';
-  const descNode  = $('#kvDescuento');  if(descNode)  descNode.textContent  = descuento ? `– ${money(descuento)}` : '—';
-  const vendNode  = $('#kvVendedor');   if(vendNode)  vendNode.textContent  = vendedor || '—';
-  const fpNode    = $('#kvFormaPago');  if(fpNode)    fpNode.textContent    = formaPago || '—';
-
-  // Graduación (valueBox)
+  // Graduación
   const set = (id,val)=>{ const n=$(id); if(n) n.textContent = S(val)||'—'; };
   set('#od_esf', od_esf); set('#od_cil', od_cil); set('#od_eje', od_eje);
   set('#oi_esf', oi_esf); set('#oi_cil', oi_cil); set('#oi_eje', oi_eje);
   set('#dnp_od', dnp_od); set('#dnp_oi', dnp_oi); set('#add', add);
   set('#dist_f', distF);  set('#dnp_occ', dnpOcc);
 
+  // Totales
+  $('#totSubtotal').textContent  = money(subtotal);
+  $('#totDesc').textContent      = descuento ? `– ${money(descuento)}` : '—';
+  $('#totOS').textContent        = precioOS ? `– ${money(precioOS)}` : '—';
+  $('#totSena').textContent      = money(sena);
+  $('#totPagoRetiro').textContent= pagoRetiro ? `– ${money(pagoRetiro)}` : '—';
+  $('#totSaldo').textContent     = money(saldo);
+
+  // Títulos
   $('#modalTitle').textContent = `Trabajo ${numero||''}`.trim();
   $('#modalSubtitle').textContent = nombre ? `Cliente: ${nombre}` : 'Vista de solo lectura';
   $('#overlay').setAttribute('aria-hidden','false');
 }
 function cerrarModal(){ $('#overlay').setAttribute('aria-hidden','true'); }
 
-// === Local search
 function localFilter(by, q, exact){
   if(!ALL_ROWS || !ALL_HEADERS) return null;
   const Q = N(q);
@@ -341,7 +376,6 @@ async function buscar({silent=false} = {}){
 
 const buscarDebounced = debounce(()=>buscar({silent:true}), DEBOUNCE_MS);
 
-// === Arranque
 window.addEventListener('DOMContentLoaded', async ()=>{
   const apiUrl = $('#apiUrl');
   if(apiUrl){
