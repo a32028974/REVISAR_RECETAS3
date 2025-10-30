@@ -1,15 +1,16 @@
 /* =========================================================================
- * Buscar trabajos + Modal (PRO) — v4.0
+ * Buscar trabajos + Modal (PRO) — v4.1
+ * Endpoint: tu Apps Script (usa `action=search&texto=...`)
  * - No modifica tu Apps Script.
- * - Precio Otro = 0/— si la celda está vacía (adiós $15 fantasma).
- * - Mapeo por encabezado (insensible a acentos y mayúsculas).
- * - Fallbacks para actions: search → all → columns.
+ * - Mapeo por encabezado (ignora acentos y mayúsculas).
+ * - "Precio otro" => 0/— si está vacío (adiós $15 fantasma).
+ * - Fallbacks: intenta search → all → columns.
+ * - Auto-focus en el input #buscar al cargar.
  * ========================================================================= */
 
 ///// CONFIG /////////////////////////////////////////////////////////////////
-const API_FALLBACK =
-  'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
-const API = (localStorage.getItem('OC_API') || '').trim() || API_FALLBACK;
+const API = (localStorage.getItem('OC_API') || '').trim()
+  || 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 
 ///// DOM HELPERS ////////////////////////////////////////////////////////////
 const $ = (s, p=document) => p.querySelector(s);
@@ -39,15 +40,15 @@ function col(headers, ...aliases){
   return -1;
 }
 
-// "$ 15", "", "—", null, "   " → 0  |  "12.345,67" → 12345.67
+// "$ 15", "", "—", null → 0   |  "12.345,67" → 12345.67
 function toMoney(v){
   if (v == null) return 0;
   const s = String(v).trim();
-  if (!s || s === '—') return 0;
+  if (!s || s === '—' || s === '-') return 0;
   const n = Number(
-    s.replace(/[^\d\-.,]/g,'')   // deja digitos, punto, coma y signo
-     .replace(/\.(?=.*\.)/g,'')  // quita puntos de miles dejando el último
-     .replace(',', '.')          // coma decimal → punto
+    s.replace(/[^\d\-.,]/g,'')       // deja dígitos, punto, coma y signo
+     .replace(/\.(?=.*\.)/g,'')      // quita puntos de miles dejando el último
+     .replace(',', '.')              // coma decimal → punto
   );
   return Number.isFinite(n) ? n : 0;
 }
@@ -62,9 +63,9 @@ async function fetchJSON(url){
 }
 
 async function apiSearch(term){
-  // 1) search
+  // 1) search con parámetro correcto `texto`
   try {
-    const u = `${API}?action=search&term=${encodeURIComponent(term||'')}`;
+    const u = `${API}?action=search&texto=${encodeURIComponent(term||'')}`;
     const j = await fetchJSON(u);
     const headers = j.headers || j.columns || j.encabezados || [];
     const rows    = j.rows    || j.items   || j.data        || [];
@@ -72,23 +73,21 @@ async function apiSearch(term){
   } catch {}
   // 2) all
   try {
-    const u = `${API}?action=all`;
-    const j = await fetchJSON(u);
+    const j = await fetchJSON(`${API}?action=all`);
     const headers = j.headers || j.columns || j.encabezados || [];
     const rows    = j.rows    || j.items   || j.data        || [];
     if (headers.length && rows.length) return { headers, rows };
   } catch {}
-  // 3) columns (sólo cabeceras)
+  // 3) columns
   try {
-    const u = `${API}?action=columns`;
-    const j = await fetchJSON(u);
+    const j = await fetchJSON(`${API}?action=columns`);
     const headers = j.headers || j.columns || j.encabezados || [];
     return { headers, rows: [] };
   } catch {}
   throw new Error('No se pudo obtener datos de la API');
 }
 
-///// MAPEO DE TUS TÍTULOS ///////////////////////////////////////////////////
+///// MAPEO DE TÍTULOS (tu hoja actual) //////////////////////////////////////
 function buildIdx(headers){
   return {
     estado:            col(headers, 'listo','estado'),
@@ -105,7 +104,7 @@ function buildIdx(headers){
     detalleArmazon:    col(headers, 'detalle armazon'),
 
     otroConcepto:      col(headers, 'otro concepto'),
-    precioOtro:        col(headers, 'precio otro','importe otro','monto otro'), // <- fuente del $15 fantasma
+    precioOtro:        col(headers, 'precio otro','importe otro','monto otro'),
 
     entregaModo:       col(headers, 'entrega'),
 
@@ -161,7 +160,7 @@ function rowToData(headers, row){
     detalleArmazon:g(idx.detalleArmazon),
 
     otroConcepto:  g(idx.otroConcepto),
-    // === CLAVE: si la celda está vacía/guion/— → 0
+    // Clave: si la celda está vacía/guion/— → 0
     precioOtro:    m(idx.precioOtro),
 
     entregaModo:   g(idx.entregaModo),
@@ -211,6 +210,7 @@ function renderList(headers, rows){
 
   if (!rows?.length){
     cont.innerHTML = '<p class="muted">Sin resultados</p>';
+    const info = $('#result-info'); if (info) info.textContent = 'Resultados: 0';
     return;
   }
 
@@ -309,33 +309,23 @@ function getUI(){
   const form = $('#form-buscar') || $('form[action="#"]') || $('form');
   const input= $('#buscar') || $('input[name="buscar"]') || $('input[type="search"]') || $('input[type="text"]');
   const btn  = $('#btn-buscar') || $$('button').find(b=>/buscar/i.test(b.textContent));
-  const cont = $('#resultados') || $('#lista') || $('#output') || $('#result');
-  const exact= $('#chk-exacto') || $('input[type="checkbox"][name="exacto"]');
-  return { form, input, btn, cont, exact };
+  return { form, input, btn };
 }
 
 async function doSearch(q){
   uiMsg('Buscando…');
   const { headers, rows } = await apiSearch(q);
-  if (!headers?.length && !rows?.length){
-    uiMsg('Sin resultados', 'muted');
-    return;
-  }
 
-  // Si apiSearch() trajo "all", filtramos local:
+  // Si la API devolvió "all", filtramos localmente por nombre o toda la fila
   let filtered = rows;
   if (rows.length && q){
-    const H = headers.map(h => String(h || ''));
-    const nH = H.map(norm);
     const idxNombre = buildIdx(headers).nombre;
     const needle = norm(q);
     filtered = rows.filter(r=>{
-      // preferimos nombre si existe, si no, busca en toda la fila
       if (idxNombre >= 0) return norm(r[idxNombre]).includes(needle);
       return r.some(cell => norm(cell).includes(needle));
     });
   }
-
   renderList(headers, filtered);
 }
 
@@ -367,6 +357,10 @@ function bindUI(){
   on($('#modal'), 'click', e=>{ if(e.target.id==='modal') closeModal(); });
 
   uiMsg('Listo.');
+
+  // Auto-focus + seleccionar texto
+  input?.focus();
+  input?.select();
 }
 
 document.addEventListener('DOMContentLoaded', bindUI);
