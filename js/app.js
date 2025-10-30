@@ -1,8 +1,3 @@
-// ===== Buscar trabajos + Modal clarito — v3.4.0 =====
-// - Captura robusta de "Fecha entrega real" (NBSP, acentos, variantes)
-// - Cruce opcional con hoja Pagos via action=pagos&numero=...
-// - Recalcula saldo con pagos y completa "Entregado por" + "Fecha y hora" si faltaban
-
 const API_FALLBACK = 'https://script.google.com/macros/s/AKfycbwsUI50KmWw4OYYwD9HfNn3qPHNBFwZ7Zx2997lfwnoahy6sBCKZwd6vKr4hhsIQXKp/exec';
 const API = (localStorage.getItem('OC_API') || API_FALLBACK || '').trim();
 
