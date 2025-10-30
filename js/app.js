@@ -63,28 +63,47 @@ async function fetchJSON(url){
 }
 
 async function apiSearch(term){
-  // 1) search con parámetro correcto `texto`
+  const url = `${API}?action=search&texto=${encodeURIComponent(term||'')}`;
+  const res = await fetch(url, { cache: 'no-store' });
+
+  // A veces Apps Script redirige (302) y la respuesta llega igual a 200.
+  // Parseo tolerante: si no es JSON directo, intento texto→JSON.
+  let j;
   try {
-const u = `${API}?action=search&texto=${encodeURIComponent(term||'')}`;
-    const j = await fetchJSON(u);
-    const headers = j.headers || j.columns || j.encabezados || [];
-    const rows    = j.rows    || j.items   || j.data        || [];
-    if (headers.length && rows.length) return { headers, rows };
-  } catch {}
-  // 2) all
-  try {
-    const j = await fetchJSON(`${API}?action=all`);
-    const headers = j.headers || j.columns || j.encabezados || [];
-    const rows    = j.rows    || j.items   || j.data        || [];
-    if (headers.length && rows.length) return { headers, rows };
-  } catch {}
-  // 3) columns
-  try {
-    const j = await fetchJSON(`${API}?action=columns`);
-    const headers = j.headers || j.columns || j.encabezados || [];
-    return { headers, rows: [] };
-  } catch {}
-  throw new Error('No se pudo obtener datos de la API');
+    j = await res.json();
+  } catch {
+    const t = await res.text();
+    try { j = JSON.parse(t); } catch { j = { raw: t }; }
+  }
+
+  // --- DEBUG: mirá en consola qué campos trae tu endpoint ---
+  console.log('API search payload →', j);
+
+  // Desanidar si viene como { ok:true, result:{...} } o similar
+  const root = j?.result || j?.data?.result || j;
+
+  // Columnas posibles (strings u objetos)
+  let headers =
+    root.headers ||
+    root.columns ||
+    root.encabezados ||
+    root.cols ||
+    [];
+
+  if (Array.isArray(headers) && typeof headers[0] === 'object') {
+    headers = headers.map(c => c.name || c.header || c.title).filter(Boolean);
+  }
+
+  // Filas posibles
+  const rows =
+    root.rows ||
+    root.items ||
+    root.data ||
+    root.values ||
+    root.result ||
+    [];
+
+  return { headers: headers || [], rows: Array.isArray(rows) ? rows : [] };
 }
 
 ///// MAPEO DE TÍTULOS (tu hoja actual) //////////////////////////////////////
